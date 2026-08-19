@@ -1,6 +1,6 @@
 /* Service worker: she studies on the subway, where the site simply did not open.
    Shell is precached; content and clips are cached the first time they are used. */
-var V = 'tcf-c54ea8b3';
+var V = 'tcf-4b85cabb';
 var SHELL = ['./', './index.html', './static/app.css', './static/app.js',
              './static/lookup.css', './static/lookup.js',
              './static/webshim.js', './static/mp3ids.js', './static/stats.js'];

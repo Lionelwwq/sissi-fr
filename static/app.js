@@ -229,7 +229,9 @@
             (x.free === false ? ' · <b>需订阅</b>' : '') + '</div>' +
             '<div class="lwhy">' + rich(x.why || '') + '</div>' +
             (x.how ? '<div class="lhow">▸ ' + rich(x.how) + '</div>' : '') +
-            '<div class="lfoot">' + cn + '<span class="lgo">打开 ↗</span></div>' +
+            '<div class="lfoot">' + cn +
+              (x.embed ? '<span class="lplay" data-embed="' + esc(x.embed) + '">▶ 在这里看</span>' : '') +
+              '<span class="lgo">去网站 ↗</span></div>' +
             '</a>';
         }).join('') + '</div>');
       } else if (k === 'tip') {
@@ -469,6 +471,21 @@
         if (e.aid_ex) list.push({ aid: e.aid_ex, text: e.example_fr });
       });
       startQueue(list, 0);
+      return;
+    }
+    var pl = t.closest('[data-embed]');
+    if (pl) {
+      ev.preventDefault(); ev.stopPropagation();
+      var card = pl.closest('.lcard');
+      var open = card.querySelector('.lframe');
+      if (open) { open.remove(); pl.textContent = '▶ 在这里看'; return; }
+      var box = document.createElement('div');
+      box.className = 'lframe';
+      box.innerHTML = '<iframe src="' + pl.dataset.embed + '" scrolling="no" frameborder="0" ' +
+                      'allowfullscreen="true" loading="lazy"></iframe>';
+      card.appendChild(box);
+      pl.textContent = '▼ 收起';
+      if (window.tcfStats) window.tcfStats.link(card.querySelector('.lt').textContent, pl.dataset.embed);
       return;
     }
     var lc = t.closest('.lcard');
