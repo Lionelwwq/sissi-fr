@@ -4,6 +4,13 @@
   var DOC = null, CUR = 0, QUEUE = [], QI = -1, RATE = 1, REPEAT = false, REP2 = false;
   var PLAY_SEQ = 0, VIEW = 'chapter', HITS = [];
   var au = document.getElementById('au');
+  /* 89% of the clips are Ogg/Opus. Safari only learned that container in 17.4, and
+     a silent decode failure is indistinguishable from "the app is broken". */
+  var CAN_OPUS = (function () {
+    try { return !!document.createElement('audio').canPlayType('audio/ogg; codecs=opus'); }
+    catch (e) { return true; }
+  })();
+  var TOUCH = matchMedia('(hover:none)').matches;
   var $ = function (id) { return document.getElementById(id); };
 
   /* ---------------- utils ---------------- */
@@ -78,13 +85,20 @@
     au.play().catch(function (e) {
       // swapping src aborts the previous play(): that is normal, not a broken audio pack
       if (e && (e.name === 'AbortError' || mine !== PLAY_SEQ)) return;
-      fetch('/api/ping').then(function () { toast('播放失败，请检查音频包'); })
-                        .catch(function () { serverGone(); });
+      fetch('/api/ping').then(function () {
+        toast(CAN_OPUS ? '这一条没能播放，换一句试试' : '这个浏览器不支持本站的音频格式');
+      }).catch(function () { serverGone(); });
     });
     highlight(aid);
     $('pNow').textContent = label || '正在播放…';
     $('pPlay').textContent = '⏸';
   }
+  au.addEventListener('error', function () {
+    if (QI >= 0 && QI < QUEUE.length - 1) { QI++; playQueueItem(); return; }
+    clearHL(); QI = -1;
+    $('pPlay').textContent = '▶';
+    $('pNow').textContent = CAN_OPUS ? '播放失败' : '浏览器不支持这种音频格式';
+  });
   au.addEventListener('ended', function () {
     if (REPEAT && !REP2) { REP2 = true; au.currentTime = 0; au.play(); return; }
     REP2 = false;
@@ -262,7 +276,8 @@
     var it = FC.list[FC.i];
     if (!it) { fcClose(); toast('本轮结束，做得好！'); return; }
     FC.shown = false;
-    $('fcProg').textContent = '第 ' + (FC.i + 1) + ' / ' + FC.list.length + ' 张　·　空格看答案，← 还不会，→ 会了';
+    $('fcProg').textContent = '第 ' + (FC.i + 1) + ' / ' + FC.list.length + ' 张　·　' +
+      (TOUCH ? '点「看答案」，再选会了 / 还不会' : '空格看答案，← 还不会，→ 会了');
     $('fcFr').textContent = it.fr;
     $('fcZh').textContent = '';
     $('fcEx').classList.add('hidden');
@@ -522,6 +537,12 @@
       h.push('<div class="navitem" data-i="' + i + '"><span class="n">' + c.no + '</span><span class="t">' + esc(c.zh) + '</span></div>');
     });
     $('nav').innerHTML = h.join('');
+    if (!CAN_OPUS) {
+      document.body.classList.add('nosound');
+      $('nosound').innerHTML = '🔇 <b>这个浏览器放不出本站的发音。</b><br>' +
+        '绝大部分音频是 Opus 格式，Safari 要 <b>iOS 17.4 / macOS 14.4</b> 以上才支持。' +
+        '请升级系统，或换 Chrome / Edge 打开，课文和词典不受影响。';
+    }
     if (store.get('dark', false)) document.body.classList.add('dark');
     RATE = store.get('rate', 1);
     document.querySelectorAll('#segSpeed button').forEach(function (b) { b.classList.toggle('on', parseFloat(b.dataset.r) === RATE); });

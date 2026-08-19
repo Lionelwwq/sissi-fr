@@ -1,5 +1,6 @@
 /* click-a-word card */
 .wpop{position:fixed;z-index:400;width:330px;max-width:calc(100vw - 16px);
+      max-height:min(72vh,540px);overflow-y:auto;-webkit-overflow-scrolling:touch;
       background:var(--card);border:1px solid var(--line);border-radius:12px;
       box-shadow:0 10px 34px rgba(16,24,40,.22);padding:13px 15px;font-size:14px;line-height:1.6}
 body.dark .wpop{box-shadow:0 10px 34px rgba(0,0,0,.5)}

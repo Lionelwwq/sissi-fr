@@ -47,7 +47,11 @@
     au.pause();
     au.src = window.CLIP(id);
     au.playbackRate = 1;
-    au.play().catch(function () {});
+    // a silent catch here meant tapping a hundred words gave no sound and no reason
+    au.play().catch(function (e) {
+      if (e && e.name === 'AbortError') return;
+      flash('这个词没能播放（浏览器可能不支持该音频格式）');
+    });
   }
 
   // several words selected: play them one after another, not the whole sentence again
@@ -59,7 +63,8 @@
       if (i >= ids.length) return;
       au.src = window.CLIP(ids[i++]);
       au.onended = function () { setTimeout(step, 160); };
-      au.play().catch(function () {});
+      au.onerror = function () { setTimeout(step, 160); };   // one bad clip must not stall the rest
+      au.play().catch(function (e) { if (!e || e.name !== 'AbortError') setTimeout(step, 160); });
     })();
   }
 

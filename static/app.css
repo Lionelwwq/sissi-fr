@@ -215,7 +215,8 @@ body.dark .b-warn{background:#3a1f1c}
   .searchbox{padding:12px 14px}
   /* below 16px iOS Safari zooms the page in on focus and never zooms back */
   .searchbox input{font-size:16px;padding:11px 12px}
-  .spk{min-width:40px;min-height:36px;font-size:16px;vertical-align:middle}
+  /* .spk sits at opacity .45 and only brightens on :hover — which never happens on touch */
+  .spk{min-width:40px;min-height:36px;font-size:16px;vertical-align:middle;opacity:.9}
   #side{padding-top:env(safe-area-inset-top)}
   /* tap anywhere outside the drawer to close it */
   #scrim{position:fixed;inset:0;background:rgba(10,16,26,.4);z-index:140;display:none}
@@ -231,3 +232,16 @@ body.dark .b-warn{background:#3a1f1c}
   .wp-add{padding:10px 14px;font-size:13.5px}
   .fc .acts .btn{min-height:44px}
 }
+
+/* the first paint waits on a 3 MB content.json; on a phone connection that is a
+   blank white screen with no explanation */
+.booting{padding:60px 20px;text-align:center;color:var(--muted);font-size:14.5px;line-height:2}
+.booting .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--accent);
+              margin:0 3px;animation:bounce 1s infinite}
+.booting .dot:nth-child(2){animation-delay:.15s}
+.booting .dot:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-7px);opacity:1}}
+#nosound{display:none;margin:14px 16px 0;padding:12px 14px;border-radius:10px;font-size:13.5px;
+         line-height:1.7;background:#fdf4e6;border-left:3px solid #e8a33d;color:var(--ink)}
+body.nosound #nosound{display:block}
+body.dark #nosound{background:#3a2f18}
