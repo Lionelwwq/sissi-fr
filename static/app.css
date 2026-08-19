@@ -283,3 +283,42 @@ body.dark #nosound{background:#3a2f18}
   #player .btn{min-width:42px;padding:0 6px}
   #player #segSpeed button{padding:11px 5px;font-size:12px}
 }
+
+/* ---------- prose audio ----------
+   Most of the French lives in paragraphs, tips and warnings; before this it could be
+   read but never heard. The numbered dots jump to one sentence, the button reads all. */
+.vbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 2px}
+.vplay{border:1px solid var(--line);background:var(--card);color:var(--accent);cursor:pointer;
+       border-radius:20px;padding:5px 12px;font-size:12.5px;font-family:inherit;display:inline-flex;
+       align-items:center;gap:6px}
+.vplay .vn{color:var(--muted);font-size:11px}
+@media (hover:hover){.vplay:hover{border-color:var(--accent);background:var(--accent-soft)}}
+.vsent{width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);
+       font-size:11px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+       font-variant-numeric:tabular-nums}
+@media (hover:hover){.vsent:hover{background:var(--accent);color:#fff}}
+.vsent.playing{background:var(--accent);color:#fff;animation:pulse .9s infinite}
+.b-tip .vbar,.b-warn .vbar{margin-top:10px}
+@media (max-width:860px){
+  .vplay{padding:9px 14px;font-size:13.5px}
+  .vsent{width:30px;height:30px;font-size:12.5px}
+  .vbar{gap:7px}
+}
+
+/* ---------- first run + progress ---------- */
+#welcome{position:fixed;inset:0;background:rgba(10,16,26,.75);z-index:600;display:flex;
+         align-items:center;justify-content:center;padding:18px}
+.wc{background:var(--card);border-radius:16px;max-width:440px;width:100%;padding:24px 22px;
+    max-height:88vh;overflow:auto}
+.wc-h{font-size:23px;font-weight:700;margin-bottom:6px}
+.wc-s{color:var(--muted);font-size:14px;margin-bottom:16px;line-height:1.7}
+.wc-g{display:flex;flex-direction:column;gap:11px;margin-bottom:16px}
+.wc-i{background:var(--accent-soft);border-radius:11px;padding:11px 14px;line-height:1.65}
+.wc-i b{display:block;font-size:15px;margin-bottom:2px}
+.wc-i span{font-size:13px;color:var(--muted)}
+.wc-t{font-size:13px;color:var(--muted);line-height:1.75;margin-bottom:18px}
+#wcGo{width:100%;min-height:46px;font-size:16px}
+.navitem.seen .n::after{content:"·";color:var(--accent);font-weight:700;margin-left:3px}
+.navitem.seen .t{color:var(--muted)}
+.only-phone{display:none}
+@media (max-width:860px){ .only-phone{display:inline-flex} }

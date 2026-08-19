@@ -142,21 +142,33 @@
   }
 
   /* ---------------- rendering ---------------- */
+  /* Most of the French in the book sits inside paragraphs, tips and warnings, which
+     have no per-sentence slot. One control per block reads them in order. */
+  function voiceBar(b, bi) {
+    if (!b.voice || !b.voice.length) return '';
+    return '<div class="vbar"><button class="vplay" data-voice="' + bi + '">🔊 朗读本段法语' +
+      '<span class="vn">' + b.voice.length + ' 句</span></button>' +
+      b.voice.map(function (v, i) {
+        return '<span class="vsent" data-play="' + v.aid + '" title="' + esc(v.fr) + '">' +
+               (i + 1) + '</span>';
+      }).join('') + '</div>';
+  }
+
   function renderBlocks(bs, color) {
     var h = [];
     bs.forEach(function (b, bi) {
       var k = b.kind;
       if (k === 'h3') h.push('<h3 class="b-h3" style="border-color:' + color + '">' + esc(b.title) + '</h3>');
       else if (k === 'h4') h.push('<h4 class="b-h4">' + esc(b.title) + '</h4>');
-      else if (k === 'para') h.push('<p class="b-para">' + rich(b.text) + '</p>');
+      else if (k === 'para') h.push('<p class="b-para">' + rich(b.text) + '</p>' + voiceBar(b, bi));
       else if (k === 'bullets') {
         if (b.title) h.push('<div class="b-lt">' + esc(b.title) + '</div>');
-        h.push('<ul class="b-ul">' + (b.items || []).map(function (x) { return '<li>' + rich(x) + '</li>'; }).join('') + '</ul>');
+        h.push('<ul class="b-ul">' + (b.items || []).map(function (x) { return '<li>' + rich(x) + '</li>'; }).join('') + '</ul>' + voiceBar(b, bi));
       } else if (k === 'steps') {
         if (b.title) h.push('<div class="b-lt">' + esc(b.title) + '</div>');
         h.push('<ol class="b-steps">' + (b.items || []).map(function (x, i) {
           return '<li><span class="stepn" style="background:' + color + '">' + (i + 1) + '</span><div>' + rich(x) + '</div></li>';
-        }).join('') + '</ol>');
+        }).join('') + '</ol>' + voiceBar(b, bi));
       } else if (k === 'table') {
         if (b.title) h.push('<div class="b-lt">' + esc(b.title) + '</div>');
         var cols = b.columns || [], rows = b.rows || [], aids = b.aids || [];
@@ -167,7 +179,7 @@
               var a = (aids[ri] || [])[ci];
               return '<td>' + (a ? '<span class="frtext" data-play="' + a + '">' + rich(c) + '</span> ' + spk(a, c) : rich(c)) + '</td>';
             }).join('') + '</tr>';
-          }).join('') + '</tbody></table></div>');
+          }).join('') + '</tbody></table></div>' + voiceBar(b, bi));
       } else if (k === 'cards') {
         if (b.title) h.push('<div class="b-lt">' + esc(b.title) + '</div>');
         (b.cards || []).forEach(function (c, ci) {
@@ -177,6 +189,7 @@
             '<div class="cz">' + rich(c.zh) + '</div>' +
             (c.note ? '<div class="cn">💡 ' + rich(c.note) + '</div>' : '') + '</div>');
         });
+        h.push(voiceBar(b, bi));
       } else if (k === 'model') {
         var m = b.model || {}, lines = m.lines || [];
         h.push('<div class="b-model" style="border-color:' + color + '">' +
@@ -201,9 +214,11 @@
               '<div class="dzh">' + rich(d.zh) + '</div></div></div>';
           }).join('') + '</div>');
       } else if (k === 'tip') {
-        h.push('<div class="b-tip"><div class="bt">💡 ' + esc(b.title || '提示') + '</div>' + rich(b.text) + '</div>');
+        h.push('<div class="b-tip"><div class="bt">💡 ' + esc(b.title || '提示') + '</div>' + rich(b.text) +
+               voiceBar(b, bi) + '</div>');
       } else if (k === 'warn') {
-        h.push('<div class="b-warn"><div class="bt">⚠️ ' + esc(b.title || '易错警告') + '</div>' + rich(b.text) + '</div>');
+        h.push('<div class="b-warn"><div class="bt">⚠️ ' + esc(b.title || '易错警告') + '</div>' + rich(b.text) +
+               voiceBar(b, bi) + '</div>');
       }
     });
     return h.join('');
@@ -253,6 +268,17 @@
     if (window.__markScrollables) window.__markScrollables();
     document.querySelectorAll('.navitem').forEach(function (e) { e.classList.toggle('on', +e.dataset.i === i); });
     store.set('last', i);
+    var done = store.get('done', {});
+    if (!done[c.key || i]) { done[c.key || i] = 1; store.set('done', done); }
+    markVisited();
+  }
+
+  function markVisited() {
+    var done = store.get('done', {});
+    document.querySelectorAll('.navitem').forEach(function (e) {
+      var c = DOC && DOC.chapters[+e.dataset.i];
+      if (c && done[c.key || +e.dataset.i]) e.classList.add('seen');
+    });
   }
 
   /* ---------------- collect audio of current view ---------------- */
@@ -260,7 +286,8 @@
     var out = [];
     document.querySelectorAll('[data-play]').forEach(function (e) {
       var a = e.getAttribute('data-play');
-      if (a) out.push({ aid: a, text: e.textContent.trim() });
+      // the prose dots show only a number; their title carries the sentence
+      if (a) out.push({ aid: a, text: (e.getAttribute('title') || e.textContent).trim() });
     });
     var seen = {}, uniq = [];
     out.forEach(function (x) { if (!seen[x.aid]) { seen[x.aid] = 1; uniq.push(x); } });
@@ -392,6 +419,12 @@
     if (b) { play(b.dataset.aid, b.dataset.t); return; }
     var p = t.closest('[data-play]');
     if (p && p.getAttribute('data-play')) { play(p.getAttribute('data-play'), p.textContent.trim().slice(0, 70)); return; }
+    var vp = t.closest('[data-voice]');
+    if (vp) {
+      var vb = (VIEW === 'chapter' ? DOC.chapters[CUR].blocks[+vp.dataset.voice] : null);
+      if (vb && vb.voice) startQueue(vb.voice.map(function (v) { return { aid: v.aid, text: v.fr }; }), 0);
+      return;
+    }
     var pm = t.closest('[data-playmodel]');
     if (pm) {
       var c = DOC.chapters[CUR], blk = c.blocks[+pm.dataset.playmodel];
@@ -450,6 +483,17 @@
       .catch(function () { $('vbList').innerHTML = '<div class="vbe">读不出来，程序可能已经退出了。</div>'; });
   }
   $('btnVocab').onclick = vbOpen;
+  /* on a phone the search box lives inside the drawer, so it took two steps to find */
+  $('btnSearch').onclick = function () { drawer(true); setTimeout(function () { $('q').focus(); }, 60); };
+
+  /* first run: she opens the app with no idea that anything is tappable */
+  if (!store.get('seen', false)) {
+    $('welcome').classList.remove('hidden');
+    $('wcGo').onclick = function () {
+      $('welcome').classList.add('hidden');
+      store.set('seen', true);
+    };
+  }
   $('vbClose').onclick = function () { $('vbwrap').classList.add('hidden'); };
   $('vbList').addEventListener('click', function (e) {
     var s = e.target.closest('.vbs');
@@ -579,6 +623,9 @@
     if (store.get('dark', false)) document.body.classList.add('dark');
     RATE = store.get('rate', 1);
     document.querySelectorAll('#segSpeed button').forEach(function (b) { b.classList.toggle('on', parseFloat(b.dataset.r) === RATE); });
-    renderChapter(Math.min(store.get('last', 0), d.chapters.length - 1));
+    var last = Math.min(store.get('last', 0), d.chapters.length - 1);
+    renderChapter(last);
+    markVisited();
+    if (last > 0) toast('接着上次：第 ' + d.chapters[last].no + ' 章');
   });
 })();
