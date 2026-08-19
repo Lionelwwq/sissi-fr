@@ -11,7 +11,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;color:var(--i
      font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
 
 /* ---------- layout ---------- */
-#app{display:flex;height:100vh;overflow:hidden}
+#app{display:flex;height:100vh;height:100dvh;overflow:hidden}
 #side{width:290px;flex:0 0 290px;background:var(--card);border-right:1px solid var(--line);
       display:flex;flex-direction:column;overflow:hidden}
 #main{flex:1;overflow-y:auto;scroll-behavior:smooth}
@@ -28,7 +28,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;color:var(--i
 #nav{flex:1;overflow-y:auto;padding:8px 0 20px}
 .navpart{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;padding:14px 18px 5px;text-transform:uppercase}
 .navitem{display:flex;gap:9px;padding:7px 18px;cursor:pointer;font-size:13.4px;align-items:baseline}
-.navitem:hover{background:var(--accent-soft)}
+@media (hover:hover){.navitem:hover{background:var(--accent-soft)}}
 .navitem.on{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);font-weight:600}
 .navitem .n{color:var(--muted);font-size:11.5px;flex:0 0 20px;font-variant-numeric:tabular-nums}
 .navitem .t{flex:1;line-height:1.45}
@@ -38,9 +38,9 @@ body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;color:var(--i
         padding:9px 20px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
 .btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;
      padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
+@media (hover:hover){.btn:hover{border-color:var(--accent);color:var(--accent)}}
 .btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
-.btn.pri:hover{opacity:.9;color:#fff}
+@media (hover:hover){.btn.pri:hover{opacity:.9;color:#fff}}
 .btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;background:var(--card);color:var(--muted);padding:6px 10px;font-size:12.5px;
@@ -90,7 +90,7 @@ table.b-tab td{border-top:1px solid var(--line);padding:8px 11px;vertical-align:
 .b-model .mprompt{padding:11px 15px;background:var(--bg);font-size:13.6px;border-bottom:1px solid var(--line)}
 .b-model .mfr{padding:13px 15px 9px;line-height:1.85}
 .b-model .mline{cursor:pointer;border-radius:5px;padding:1px 3px;transition:background .15s}
-.b-model .mline:hover{background:var(--accent-soft)}
+@media (hover:hover){.b-model .mline:hover{background:var(--accent-soft)}}
 .b-model .mline.play{background:#ffe9a8;color:#33270a}
 body.dark .b-model .mline.play{background:#5c4a10;color:#ffe9a8}
 .b-model .mzh{padding:0 15px 12px;color:var(--muted);font-size:13.6px;border-bottom:1px dashed var(--line)}
@@ -118,11 +118,11 @@ body.dark .b-warn{background:#3a1f1c}
 /* ---------- speak button ---------- */
 .spk{flex:0 0 auto;border:0;background:transparent;cursor:pointer;font-size:15px;line-height:1;
      padding:2px 4px;border-radius:6px;opacity:.45;transition:opacity .15s}
-.spk:hover{opacity:1;background:var(--accent-soft)}
+@media (hover:hover){.spk:hover{opacity:1;background:var(--accent-soft)}}
 .spk.playing{opacity:1;animation:pulse .9s infinite}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
 .frtext{cursor:pointer}
-.frtext:hover{text-decoration:underline dotted var(--accent);text-underline-offset:3px}
+@media (hover:hover){.frtext:hover{text-decoration:underline dotted var(--accent);text-underline-offset:3px}}
 
 /* ---------- topics ---------- */
 .thead{border-radius:12px;padding:18px 22px;color:#fff;margin:24px 0 14px;display:flex;
@@ -190,5 +190,44 @@ body.dark .b-warn{background:#3a1f1c}
 .vbx{font-size:12.5px;color:var(--muted);font-style:italic;margin-top:3px}
 .vbs{flex:0 0 auto}
 .vbd{flex:0 0 auto;color:var(--muted);font-size:12px;padding:4px 9px}
-.vbd:hover{color:#c0392b;border-color:#c0392b}
+@media (hover:hover){.vbd:hover{color:#c0392b;border-color:#c0392b}}
 .vbe{padding:26px 10px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.7}
+
+/* ---------- phone ----------
+   Measured on a 375px viewport: the toolbar wrapped to three rows (131px, 16% of the
+   screen), every button was ~31px tall against the 44px touch guideline, and the 🔊
+   next to each sentence — the most-tapped control in the app — was 29x19px. */
+@media (max-width:860px){
+  /* 453px of buttons on a 375px screen put 📒 and 🌙 off-screen and unreachable */
+  .topbar{flex-wrap:nowrap;gap:6px;padding:8px 10px;overflow-x:auto;scrollbar-width:none}
+  .topbar::-webkit-scrollbar{display:none}
+  .lbl{display:none}
+  .topbar .btn{min-height:42px;padding:9px 12px;font-size:14px}
+  /* playback controls move down to the player bar, within thumb reach */
+  .topbar #segSpeed,.topbar #btnRepeat{display:none}
+  #player{padding:8px 12px calc(8px + env(safe-area-inset-bottom));gap:7px}
+  #player .btn{min-width:46px;min-height:44px;font-size:16px}
+  #player .now{display:none}
+  #player #segSpeed{margin-left:auto}
+  #player #segSpeed button{padding:11px 10px;font-size:13px}
+  #player #btnRepeat{min-width:46px}
+  .navitem{padding:12px 18px}
+  .searchbox{padding:12px 14px}
+  /* below 16px iOS Safari zooms the page in on focus and never zooms back */
+  .searchbox input{font-size:16px;padding:11px 12px}
+  .spk{min-width:40px;min-height:36px;font-size:16px;vertical-align:middle}
+  #side{padding-top:env(safe-area-inset-top)}
+  /* tap anywhere outside the drawer to close it */
+  #scrim{position:fixed;inset:0;background:rgba(10,16,26,.4);z-index:140;display:none}
+  #side.open ~ #scrim,body.drawer #scrim{display:block}
+  .b-para,.b-tip,.b-warn,.b-ul li,.b-steps li{font-size:15.5px}
+  table.b-tab th,table.b-tab td{padding:10px 11px}
+  /* a wide table must announce that it scrolls */
+  .tabwrap{position:relative}
+  .tabwrap.scrolls::after{content:"← 左右滑动看完整张表 →";position:sticky;left:0;display:block;
+    font-size:11.5px;color:var(--muted);padding:5px 2px 0;text-align:center}
+  .wpop{width:min(330px,calc(100vw - 20px))}
+  .wp-say{width:38px;height:38px;font-size:17px}
+  .wp-add{padding:10px 14px;font-size:13.5px}
+  .fc .acts .btn{min-height:44px}
+}

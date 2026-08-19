@@ -218,6 +218,7 @@
         renderBlocks(c.blocks, c.color);
     }
     $('main').scrollTop = 0;
+    if (window.__markScrollables) window.__markScrollables();
     document.querySelectorAll('.navitem').forEach(function (e) { e.classList.toggle('on', +e.dataset.i === i); });
     store.set('last', i);
   }
@@ -376,7 +377,7 @@
       clearTimeout(qt);            // a pending debounce would repaint search results over the chapter
       $('q').value = '';
       renderChapter(+nv.dataset.i);
-      $('side').classList.remove('open');
+      drawer(false);
       return;
     }
   });
@@ -444,7 +445,16 @@
     document.body.classList.toggle('dark');
     store.set('dark', document.body.classList.contains('dark'));
   };
-  $('btnMenu').onclick = function () { $('side').classList.toggle('open'); };
+  /* ---------------- phone drawer ---------------- */
+  var scrim = document.createElement('div');
+  scrim.id = 'scrim';
+  document.body.appendChild(scrim);
+  function drawer(open) {
+    $('side').classList.toggle('open', open);
+    document.body.classList.toggle('drawer', open);
+  }
+  $('btnMenu').onclick = function () { drawer(!$('side').classList.contains('open')); };
+  scrim.onclick = function () { drawer(false); };   // tapping the page used to leave it open
   $('btnQuit').onclick = function () {
     if (!confirm('要退出程序吗？\n\n退出后这个网页就不能用了，下次学习请重新双击 TCF法语学习助手.exe。')) return;
     au.pause();
@@ -471,6 +481,34 @@
     if (e.target.tagName === 'INPUT') return;
     if (e.key === ' ') { e.preventDefault(); $('pPlay').click(); }
   });
+
+  /* ---------------- phone layout ----------------
+     The toolbar wrapped to three rows on a 375px screen. Speed and repeat are
+     playback controls, so on narrow screens they move into the player bar. */
+  function placeControls() {
+    var narrow = window.innerWidth <= 860;
+    var seg = $('segSpeed'), rep = $('btnRepeat');
+    var host = narrow ? $('player') : document.querySelector('.topbar');
+    if (seg.parentNode !== host) {
+      if (narrow) { host.appendChild(seg); host.appendChild(rep); }
+      else {
+        var anchor = document.querySelector('.topbar .spacer');
+        host.insertBefore(seg, anchor);
+        host.insertBefore(rep, anchor);
+      }
+    }
+  }
+  placeControls();
+  var rz;
+  window.addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(placeControls, 150); });
+
+  /* a table wider than its box gives no hint that it scrolls sideways */
+  function markScrollables() {
+    document.querySelectorAll('.tabwrap').forEach(function (w) {
+      w.classList.toggle('scrolls', w.scrollWidth > w.clientWidth + 4);
+    });
+  }
+  window.__markScrollables = markScrollables;
 
   /* ---------------- boot ---------------- */
   fetch('/api/content').then(function (r) { return r.json(); }).then(function (d) {
