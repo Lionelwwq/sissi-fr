@@ -1,0 +1,4 @@
+* text=auto
+*.opus binary
+*.mp3 binary
+*.json -text

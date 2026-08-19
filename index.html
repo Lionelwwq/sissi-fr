@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TCF 法语学习助手 · 王思专属版</title>
+<link rel="stylesheet" href="static/app.css">
+<link rel="stylesheet" href="static/lookup.css">
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="brand">
+      <div class="ttl">TCF 法语学习助手</div>
+      <div class="sub">王思专属版 · 加拿大法语真人语音</div>
+    </div>
+    <div class="searchbox"><input id="q" placeholder="搜索法语或中文…（Ctrl+K）" autocomplete="off"></div>
+    <nav id="nav"></nav>
+  </aside>
+
+  <main id="main">
+    <div class="topbar">
+      <button class="btn" id="btnMenu">☰</button>
+      <button class="btn pri" id="btnPlayAll">▶ 朗读本章法语</button>
+      <button class="btn" id="btnCards">🎴 背诵模式</button>
+      <button class="btn" id="btnVocab">📒 生词本</button>
+      <div class="seg" id="segSpeed">
+        <button data-r="0.75">0.75×</button><button data-r="1" class="on">1×</button><button data-r="1.25">1.25×</button>
+      </div>
+      <button class="btn" id="btnRepeat" title="每句连续播放两遍">🔁 复读</button>
+      <div class="spacer"></div>
+      <button class="btn" id="btnDark">🌙</button>
+      <button class="btn hidden" id="btnQuit">⏻</button>
+    </div>
+    <div id="wrap"></div>
+  </main>
+</div>
+
+<div id="player">
+  <button class="btn" id="pPrev">⏮</button>
+  <button class="btn pri" id="pPlay">▶</button>
+  <button class="btn" id="pNext">⏭</button>
+  <button class="btn" id="pStop">⏹</button>
+  <div class="now" id="pNow">点任意法语句子即可发音 · 加拿大法语神经语音（考官男声 / 考生女声）</div>
+</div>
+
+<div id="fcwrap" class="hidden">
+  <div class="fc">
+    <div class="prog" id="fcProg"></div>
+    <div class="fr" id="fcFr"></div>
+    <div class="zh" id="fcZh"></div>
+    <div class="ex hidden" id="fcEx"><div id="fcExFr"></div><div class="exzh" id="fcExZh"></div></div>
+    <div class="acts">
+      <button class="btn" id="fcSpeak">🔊 再听一遍</button>
+      <button class="btn pri" id="fcReveal">👁 看答案 (空格)</button>
+      <button class="btn" id="fcKnow">✅ 会了 (→)</button>
+      <button class="btn" id="fcAgain">🔄 还不会 (←)</button>
+      <button class="btn" id="fcClose">✕ 退出</button>
+    </div>
+  </div>
+</div>
+
+<div id="vbwrap" class="hidden">
+  <div class="vb">
+    <div class="vbh"><b>📒 生词本</b><span id="vbN" class="vbn"></span>
+      <span class="spacer"></span><button class="btn" id="vbClose">✕ 关闭</button></div>
+    <div id="vbList" class="vbl"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<audio id="au"></audio>
+<script src="static/mp3ids.js"></script>
+<script src="static/webshim.js"></script>
+<script src="static/app.js"></script>
+<script src="static/lookup.js"></script>
+</body>
+</html>
