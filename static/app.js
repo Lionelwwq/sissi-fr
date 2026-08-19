@@ -216,17 +216,36 @@
           }).join('') + '</div>');
       } else if (k === 'links') {
         if (b.title) h.push('<div class="b-lt">' + esc(b.title) + '</div>');
+        /* 91 cards in one chapter is a lot to eyeball; let her narrow it down first */
+        var lvn = {}, nEmbed = 0, nCn = 0;
+        (b.links || []).forEach(function (x) {
+          if (x.level) lvn[x.level] = (lvn[x.level] || 0) + 1;
+          if (x.embed) nEmbed++;
+          if (x.cn_ok === 'yes') nCn++;
+        });
+        h.push('<div class="lfilter">' +
+          '<button class="lfb on" data-f="all">全部 ' + (b.links || []).length + '</button>' +
+          ['A2', 'B1', 'B2'].filter(function (L) { return lvn[L]; }).map(function (L) {
+            return '<button class="lfb lv-' + L + '" data-f="lv:' + L + '">' + L + ' ' + lvn[L] + '</button>';
+          }).join('') +
+          (nEmbed ? '<button class="lfb" data-f="embed">▶ 能直接播 ' + nEmbed + '</button>' : '') +
+          (nCn ? '<button class="lfb" data-f="cn">国内可看 ' + nCn + '</button>' : '') +
+          '</div>');
         h.push('<div class="lgrid">' + (b.links || []).map(function (x) {
           // only the domain family is a fact; the rest is a guess and says so
           var cn = x.cn_ok === 'yes' ? '<span class="lcn ok">国内可看</span>'
                  : x.cn_ok === 'vpn' ? '<span class="lcn vpn">需要梯子</span>'
                  : '<span class="lcn unsure">大概率能开 · 点一下试试</span>';
-          return '<a class="lcard" href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' +
+          return '<a class="lcard" href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer"' +
+            ' data-lv="' + esc(x.level || '') + '" data-embed-ok="' + (x.embed ? '1' : '0') +
+            '" data-cn="' + esc(x.cn_ok || '') + '">' +
             '<div class="lh"><span class="lt">' + esc(x.title) + '</span>' +
-            '<span class="lv">' + esc(x.level || '') + '</span></div>' +
+            (x.level ? '<span class="lv lv-' + esc(x.level) + '">' + esc(x.level) + '</span>' : '') +
+            '</div>' +
             '<div class="lmeta">' + [x.platform, x.kind, x.length, x.accent]
               .filter(Boolean).map(esc).join(' · ') +
             (x.free === false ? ' · <b>需订阅</b>' : '') + '</div>' +
+            (x.level_why ? '<div class="llw">' + esc(x.level) + '：' + rich(x.level_why) + '</div>' : '') +
             '<div class="lwhy">' + rich(x.why || '') + '</div>' +
             (x.how ? '<div class="lhow">▸ ' + rich(x.how) + '</div>' : '') +
             '<div class="lfoot">' + cn +
@@ -471,6 +490,21 @@
         if (e.aid_ex) list.push({ aid: e.aid_ex, text: e.example_fr });
       });
       startQueue(list, 0);
+      return;
+    }
+    var fb = t.closest('.lfb');
+    if (fb) {
+      ev.preventDefault();
+      var bar = fb.closest('.lfilter');
+      bar.querySelectorAll('.lfb').forEach(function (x) { x.classList.toggle('on', x === fb); });
+      var f = fb.dataset.f, grid = bar.nextElementSibling;
+      grid.querySelectorAll('.lcard').forEach(function (c) {
+        var show = f === 'all' ? true
+                 : f === 'embed' ? c.dataset.embedOk === '1'
+                 : f === 'cn' ? c.dataset.cn === 'yes'
+                 : c.dataset.lv === f.slice(3);
+        c.classList.toggle('hidden', !show);
+      });
       return;
     }
     var pl = t.closest('[data-embed]');
