@@ -10,6 +10,17 @@
   var au = new Audio();
   au.preload = 'auto';
   var pop = null;
+  /* Two scripts each held their own audio element and neither knew about the other,
+     so a tapped word played on top of the chapter being read aloud and the player's
+     stop button could not reach it. A sequence also kept its onended handler after
+     being interrupted, and quietly resumed once the interrupting clip finished. */
+  var SEQ = 0;
+  function takeAudio() {
+    SEQ++;
+    au.onended = null; au.onerror = null;
+    try { au.pause(); } catch (e) {}
+    if (window.tcfAudio) window.tcfAudio.stop();
+  }
 
   /* iOS only "unlocks" an audio element if its first play() runs inside the
      synchronous part of a real gesture. Word lookup plays *after* awaiting the
@@ -29,6 +40,7 @@
                         .catch(function () {});
     } catch (e) {}
   }
+  document.addEventListener('touchstart', unlock, true);   // a long press plays before touchend ever fires
   document.addEventListener('touchend', unlock, true);
   document.addEventListener('mousedown', unlock, true);
 
@@ -49,7 +61,8 @@
       fetch('/api/dict').then(function (r) { return r.json(); }),
       fetch('/api/dict/audio-index').then(function (r) { return r.json(); }),
       fetch('/api/conj').then(function (r) { return r.json(); }).catch(function () { return {}; })
-    ]).then(function (a) { DICT = a[0]; WORDS = a[1]; CONJ = a[2] || {}; });
+    ]).then(function (a) { DICT = a[0]; WORDS = a[1]; CONJ = a[2] || {}; },
+            function (e) { loading = null; throw e; });
     return loading;
   }
 
@@ -72,7 +85,7 @@
   function playWord(w) {
     var id = WORDS && WORDS[keyOf(w)];
     if (!id) { flash('这个词没有单独录音'); return; }
-    au.pause();
+    takeAudio();
     au.src = window.CLIP(id);
     au.playbackRate = rate();
     // a silent catch here meant tapping a hundred words gave no sound and no reason
@@ -86,9 +99,10 @@
   function playSequence(words) {
     var ids = words.map(function (w) { return WORDS && WORDS[keyOf(w)]; }).filter(Boolean);
     if (!ids.length) { flash('这几个词没有录音'); return; }
-    var i = 0;
+    takeAudio();
+    var mine = SEQ, i = 0;
     (function step() {
-      if (i >= ids.length) return;
+      if (mine !== SEQ || i >= ids.length) return;
       au.src = window.CLIP(ids[i++]);
       au.playbackRate = rate();
       au.onended = function () { setTimeout(step, 160); };
@@ -192,12 +206,13 @@
     };
   }
 
+  function dictFail() { flash('词典还没下载好，连上网再点一次'); }
   function lookup(word, x, y, extra) {
     load().then(function () {
       playWord(word);                    // sound first: that is what she clicked for
       if (window.tcfStats) window.tcfStats.word(word);
       card(DICT[keyOf(word)], word, x, y, extra);
-    });
+    }).catch(dictFail);
   }
 
   /* --- turn a click inside French text into a word --- */
@@ -215,29 +230,30 @@
   /* Anywhere inside the reading pane counts. A click on Chinese simply finds no
      Latin word and falls through, so there is no need to whitelist French islands. */
   var ZONES = '#wrap, .fc, .wpop, .promptbox, .cbox, .b-model, .reccard';
-  var DEAD = 'button, a, input, textarea, select, .spk, .wp-head, .wp-foot';
+  var DEAD = 'button, a, input, textarea, select, .spk, .wp-head, .wp-foot, [data-say]';
 
   /* Tapping a word looks it up and stops there, so whole-sentence playback was
      reachable only through the small 🔊. A long press now plays the sentence —
      the gesture the 4px gaps between words used to be doing by accident. */
-  var LP = { timer: null, x: 0, y: 0, fired: false };
+  var LP = { timer: null, x: 0, y: 0, at: 0 };
   function sentenceUnder(el) {
     var n = el && el.closest ? el.closest('[data-play],[data-aid]') : null;
     return n ? (n.getAttribute('data-play') || n.getAttribute('data-aid')) : null;
   }
   function lpStart(e) {
     var pt = e.touches ? e.touches[0] : e;
+    LP.at = 0;                       // every new gesture starts clean
     var host = e.target.closest && e.target.closest(ZONES);
     if (!host || (e.target.closest && e.target.closest(DEAD))) return;
     var aid = sentenceUnder(e.target);
     if (!aid) return;
-    LP.fired = false; LP.x = pt.clientX; LP.y = pt.clientY;
+    LP.x = pt.clientX; LP.y = pt.clientY;
     clearTimeout(LP.timer);
     LP.timer = setTimeout(function () {
-      LP.fired = true;
+      LP.at = Date.now();
       close();
-      au.pause();
-      au.src = '/audio/' + aid;
+      takeAudio();
+      au.src = window.CLIP(aid);
       au.playbackRate = rate();
       au.play().catch(function () {});
       flash('▶ 播放整句');
@@ -260,7 +276,8 @@
   document.addEventListener('mouseup', lpEnd, true);
 
   document.addEventListener('click', function (e) {
-    if (LP.fired) { LP.fired = false; e.preventDefault(); e.stopPropagation(); return; }
+    // iOS does not reliably send a click after a long press; this window expires by itself
+    if (Date.now() - LP.at < 700) { LP.at = 0; e.preventDefault(); e.stopPropagation(); return; }
     var host = e.target.closest(ZONES);
     if (!host) return;
     if (e.target.closest(DEAD)) return;
@@ -282,7 +299,7 @@
                      '<span class="cz">' + (d ? esc(d.zh[0]) : '—') + '</span></div>';
             }).join('');
           card(known[0] || null, words[0], e.clientX, e.clientY, list);
-        });
+        }).catch(dictFail);
         return;
       }
     }
@@ -295,12 +312,15 @@
     load().then(function () {
       if (!DICT[keyOf(w)] && !(CONJ && CONJ[keyOf(w)]) && !(WORDS && WORDS[keyOf(w)])) return;
       lookup(w, e.clientX, e.clientY);
-    });
+    }).catch(dictFail);
     e.preventDefault(); e.stopPropagation();
   }, true);
 
   // pre-warm: otherwise her first tap waits on ~1.5 MB of dictionary
   setTimeout(function () { load().catch(function () {}); }, 1500);
 
-  window.tcfLookup = { lookup: lookup, play: playWord };
+  window.tcfLookup = { lookup: lookup, play: playWord, stop: function () {
+    SEQ++; au.onended = null; au.onerror = null;
+    try { au.pause(); au.currentTime = 0; } catch (e) {}
+  } };
 })();

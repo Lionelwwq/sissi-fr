@@ -25,6 +25,7 @@
   <main id="main">
     <div class="topbar">
       <button class="btn" id="btnMenu">☰</button>
+      <button class="btn today" id="btnPlan" title="今天练什么">📅<span class="lbl"> 今天</span><i class="dot hidden" id="planDot"></i></button>
       <button class="btn pri" id="btnPlayAll">▶ 朗读<span class="lbl">本章法语</span></button>
       <button class="btn" id="btnCards">🎴 背诵<span class="lbl">模式</span></button>
       <button class="btn" id="btnVocab">📒 生词本</button>
@@ -89,8 +90,16 @@
       <div class="wc-i"><b>🔊 朗读本段/本章</b><span>连着播，可以当听力放着听</span></div>
       <div class="wc-i"><b>🎴 背诵模式</b><span>看法语猜中文，答错的会再出现</span></div>
     </div>
-    <div class="wc-t">左上角 ☰ 打开目录，共 56 章。想找什么直接用 🔍 搜，中法文都能搜。<br>第 30 章是<b>视频与听力资源库</b>，91 条都验证过、标了国内点不点得开。<br><b>📊 学习记录</b>会记下你看了哪章、查了哪些词、点开过哪些视频——只存在这台设备上，<b>不会自动发给任何人</b>。</div>
+    <div class="wc-t">左上角 ☰ 打开目录，共 56 章。想找什么直接用 🔍 搜，中法文都能搜。<br>第 30 章是<b>视频与听力资源库</b>，<span id="wcRes">每一条</span>都验证过，标了难度和国内能不能打开。<br><b>📊 学习记录</b>会记下你看了哪章、查了哪些词、点开过哪些视频——只存在这台设备上，<b>不会自动发给任何人</b>。</div>
     <button class="btn pri" id="wcGo">开始</button>
+  </div>
+</div>
+
+<div id="dpwrap" class="hidden">
+  <div class="dp">
+    <div class="dph"><b>📅 今天练什么</b><span class="dpd" id="dpDate"></span>
+      <span class="spacer"></span><button class="btn" id="dpClose">✕ 关闭</button></div>
+    <div id="dpBody" class="dpb"></div>
   </div>
 </div>
 

@@ -2,14 +2,10 @@
 (function () {
   'use strict';
   var DOC = null, CUR = 0, QUEUE = [], QI = -1, RATE = 1, REPEAT = false, REP2 = false;
-  var PLAY_SEQ = 0, VIEW = 'chapter', HITS = [];
+  var PLAY_SEQ = 0, VIEW = 'chapter', HITS = [], ARMED = false;
   var au = document.getElementById('au');
-  /* 89% of the clips are Ogg/Opus. Safari only learned that container in 17.4, and
-     a silent decode failure is indistinguishable from "the app is broken". */
-  var CAN_OPUS = (function () {
-    try { return !!document.createElement('audio').canPlayType('audio/ogg; codecs=opus'); }
-    catch (e) { return true; }
-  })();
+  /* All 19,574 clips are mp3. They used to be 89% Ogg/Opus, which Safari only learned
+     in 17.4 — on an older iPhone a third of the book was silent with no explanation. */
   var TOUCH = matchMedia('(hover:none)').matches;
   /* same iOS unlock story as lookup.js: the flashcard view auto-plays after an
      async render, which is outside the gesture */
@@ -30,6 +26,7 @@
     document.addEventListener('mousedown', unlock, true);
   })();
   var $ = function (id) { return document.getElementById(id); };
+  window.tcfAudio = { stop: function () { stopAll(true); } };
 
   /* ---------------- utils ---------------- */
   function esc(s) {
@@ -53,14 +50,22 @@
 
   /* ---------------- audio ---------------- */
   function clearHL() {
-    document.querySelectorAll('.spk.playing').forEach(function (e) { e.classList.remove('playing'); });
+    // dots and table cells take .playing too, and used to keep it for the whole chapter
+    document.querySelectorAll('.playing').forEach(function (e) { e.classList.remove('playing'); });
     document.querySelectorAll('.mline.play,.dtx.play').forEach(function (e) { e.classList.remove('play'); });
   }
-  function highlight(aid) {
+  function highlight(aid, srcEl) {
     clearHL();
     // model sentences carry data-play, not data-aid — match both or they never light up
-    var b = document.querySelector('[data-aid="' + aid + '"]') ||
-            document.querySelector('[data-play="' + aid + '"]');
+    var b = srcEl && srcEl.classList ? srcEl : null;
+    if (!b) {
+      var all = document.querySelectorAll('[data-aid="' + aid + '"], [data-play="' + aid + '"]');
+      var near = window.innerHeight / 3, bd = Infinity;
+      for (var i = 0; i < all.length; i++) {
+        var d = Math.abs(all[i].getBoundingClientRect().top - near);
+        if (d < bd) { bd = d; b = all[i]; }
+      }
+    }
     if (!b) return;
     b.classList.add('playing');
     var host = b.classList.contains('mline') ? b : (b.closest('.mline') || b.closest('.dtx') || b.closest('.b-card') || b.closest('.pcard'));
@@ -83,19 +88,24 @@
     QUEUE = [];
     QI = -1;
   }
-  function stopAll() {
+  function stopAll(keepLookup) {
     dropQueue();
     REP2 = false;
+    ARMED = false;
     try { au.pause(); au.currentTime = 0; } catch (e) {}
+    // the word / long-press clip lives in lookup.js and used to survive every stop
+    if (!keepLookup && window.tcfLookup && window.tcfLookup.stop) window.tcfLookup.stop();
     clearHL();
     $('pPlay').textContent = '▶';
     $('pNow').textContent = '点任意法语句子即可发音';
   }
 
-  function play(aid, label, fromQueue) {
+  function play(aid, label, fromQueue, srcEl) {
     if (!aid) { toast('这一条没有音频'); return; }
     if (!fromQueue) dropQueue();
     REP2 = false;
+    ARMED = true;
+    if (window.tcfLookup && window.tcfLookup.stop) window.tcfLookup.stop();
     au.pause();
     au.src = window.CLIP(aid);
     au.playbackRate = RATE;
@@ -104,10 +114,10 @@
       // swapping src aborts the previous play(): that is normal, not a broken audio pack
       if (e && (e.name === 'AbortError' || mine !== PLAY_SEQ)) return;
       fetch('/api/ping').then(function () {
-        toast(CAN_OPUS ? '这一条没能播放，换一句试试' : '这个浏览器不支持本站的音频格式');
+        toast('这一条没能播放，换一句试试');
       }).catch(function () { serverGone(); });
     });
-    highlight(aid);
+    highlight(aid, srcEl);
     if (window.tcfStats) window.tcfStats.audio(label);
     $('pNow').textContent = label || '正在播放…';
     $('pPlay').textContent = '⏸';
@@ -116,7 +126,7 @@
     if (QI >= 0 && QI < QUEUE.length - 1) { QI++; playQueueItem(); return; }
     clearHL(); QI = -1;
     $('pPlay').textContent = '▶';
-    $('pNow').textContent = CAN_OPUS ? '播放失败' : '浏览器不支持这种音频格式';
+    $('pNow').textContent = '播放失败';
   });
   au.addEventListener('ended', function () {
     if (REPEAT && !REP2) { REP2 = true; au.currentTime = 0; au.play(); return; }
@@ -205,7 +215,7 @@
           '<div class="mzh">' + rich(m.text_zh).split('\n').join('<br>') + '</div>' +
           ((m.notes || []).length ? '<div class="mnotes"><div class="mnt">✍ 讲评 Analyse</div><ol>' +
             m.notes.map(function (n) { return '<li>' + rich(n) + '</li>'; }).join('') + '</ol></div>' : '') +
-          '</div>');
+          '</div>' + voiceBar(b, bi));
       } else if (k === 'dialogue') {
         if (b.title) h.push('<div class="b-lt">' + esc(b.title) + '</div>');
         h.push('<div class="b-dial"><div style="margin-bottom:8px"><button class="btn" data-playdial="' + bi + '">▶ 播放整段对话（双人配音）</button></div>' +
@@ -517,9 +527,12 @@
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     var b = t.closest('[data-aid]');
-    if (b) { play(b.dataset.aid, b.dataset.t); return; }
+    if (b) { play(b.dataset.aid, b.dataset.t, false, b); return; }
     var p = t.closest('[data-play]');
-    if (p && p.getAttribute('data-play')) { play(p.getAttribute('data-play'), p.textContent.trim().slice(0, 70)); return; }
+    if (p && p.getAttribute('data-play')) {
+      play(p.getAttribute('data-play'), (p.getAttribute('title') || p.textContent).trim().slice(0, 70), false, p);
+      return;
+    }
     var vp = t.closest('[data-voice]');
     if (vp) {
       var vb = (VIEW === 'chapter' ? DOC.chapters[CUR].blocks[+vp.dataset.voice] : null);
@@ -624,6 +637,206 @@
     fetch('/api/vocab/list').then(function (r) { return r.json(); }).then(vbRender)
       .catch(function () { $('vbList').innerHTML = '<div class="vbe">读不出来，程序可能已经退出了。</div>'; });
   }
+
+  /* ---------------- 今天练什么 ----------------
+     第 31 章给的是一张固定的周计划表，看两遍就不会再看第三遍。这一版每天按她自己的
+     记录重排：最久没回头的一章、下一章新课、还没点开过的资源、生词本里的词，再加
+     一道口语题。每条都能一键跳过去，勾掉之后当天不再出现。 */
+  var PLAN = { day: '', items: [] };
+  function dayKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  /* 同一天必须给出同一份清单：每刷新一次就重排的东西不叫计划。
+     用日期做种子的伪随机，换一天才换内容。 */
+  function seeded(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+    return function () { h = (h * 1664525 + 1013904223) >>> 0; return h / 4294967296; };
+  }
+  function chIndexByKey(key) {
+    if (!DOC) return -1;
+    for (var i = 0; i < DOC.chapters.length; i++) {
+      var c = DOC.chapters[i];
+      if ((c.key || ('ch' + c.no)) === key) return i;
+    }
+    return -1;
+  }
+  function allLinks() {
+    var out = [];
+    DOC.chapters.forEach(function (c, i) {
+      (c.blocks || []).forEach(function (b) {
+        (b.links || []).forEach(function (x) { out.push({ x: x, ci: i }); });
+      });
+    });
+    return out;
+  }
+  function planGo(i, after) {
+    $('dpwrap').classList.add('hidden');
+    renderChapter(i);
+    drawer(false);
+    if (after) setTimeout(after, 80);
+  }
+  // the resource lives among 168 cards; landing on the chapter is not landing on it
+  function spotlight(url) {
+    var a = document.querySelector('#wrap .lcard[href="' + url + '"]');
+    if (!a) return;
+    a.scrollIntoView({ block: 'center' });
+    a.classList.add('spot');
+    setTimeout(function () { a.classList.remove('spot'); }, 6000);
+  }
+
+  function cut(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
+  function planBuild(vocab) {
+    // one generator per slot: otherwise adding a word to the vocabulary book shifts how
+    // many numbers the shuffle eats and the speaking topic changes for no reason
+    var Rres = seeded(PLAN.day + ':res'), Rvoc = seeded(PLAN.day + ':voc'), Rtalk = seeded(PLAN.day + ':talk');
+    var st = window.tcfStats ? window.tcfStats.summary() : { chapters: [], links: [] };
+    var done = store.get('done', {});
+    var items = [];
+
+    // ① 最久没回头的一章
+    var read = st.chapters.filter(function (c) { return c.sec > 45 && chIndexByKey(c.key) >= 0; })
+                          .sort(function (a, b) { return (a.last || 0) - (b.last || 0); });
+    if (read.length) {
+      var r = read[0], ri = chIndexByKey(r.key);
+      var ago = r.last ? Math.floor((Date.now() - r.last) / 864e5) : null;
+      items.push({ k: 'review', icon: '🔁', tag: '复习', t: '第 ' + r.no + ' 章 · ' + r.zh,
+        s: (ago === null ? '' : ago <= 0 ? '今天看过，再过一遍' : ago + ' 天没回头了') +
+           '　·　当时读了 ' + window.tcfStats.mins(r.sec),
+        b: '打开这一章', go: function () { planGo(ri); } });
+    }
+
+    // ② 下一章新课
+    var nxt = -1;
+    for (var i = 0; i < DOC.chapters.length; i++) {
+      if (!done[DOC.chapters[i].key || i]) { nxt = i; break; }
+    }
+    if (nxt < 0) {                       // 全书读完了：挑当时停留最短的一章重读
+      var least = st.chapters.slice().sort(function (a, b) { return a.sec - b.sec; })[0];
+      nxt = least ? chIndexByKey(least.key) : 0;
+    }
+    if (nxt >= 0) {
+      var nc = DOC.chapters[nxt], ni = nxt;
+      items.push({ k: 'new', icon: '📖', tag: '新课', t: '第 ' + nc.no + ' 章 · ' + nc.zh,
+        s: cut(String(nc.intro || ''), 62), b: '开始读', go: function () { planGo(ni); } });
+    }
+
+    // ③ 一条还没点开过的听力材料
+    var opened = {};
+    (st.links || []).forEach(function (l) { opened[l.url] = 1; });
+    var pool = allLinks().filter(function (o) {
+      return !opened[o.x.url] && !opened[o.x.embed] && o.x.cn_ok !== 'vpn';
+    });
+    var pref = pool.filter(function (o) { return o.x.level === 'A2' || o.x.level === 'B1'; });
+    var cand = pref.length ? pref : pool;
+    if (cand.length) {
+      var pk = cand[Math.floor(Rres() * cand.length)];
+      items.push({ k: 'res', icon: '🎧', tag: '听力', t: pk.x.title,
+        s: [pk.x.platform, pk.x.level, pk.x.length].filter(Boolean).join(' · ') +
+           (pk.x.how ? '　·　' + cut(String(pk.x.how).replace(/<[^>]+>/g, ''), 64) : ''),
+        b: pk.x.embed ? '去看（能站内播）' : '去看这一条',
+        go: function () { planGo(pk.ci, function () { spotlight(pk.x.url); }); } });
+    }
+
+    // ④ 生词：够 5 个就背自己存的，否则先背这一章的词卡
+    if (vocab && vocab.length >= 5) {
+      var a = vocab.slice();
+      for (var j = a.length - 1; j > 0; j--) {
+        var k2 = Math.floor(Rvoc() * (j + 1)), tmp = a[j]; a[j] = a[k2]; a[k2] = tmp;
+      }
+      var picks = a.slice(0, Math.min(12, a.length));
+      items.push({ k: 'vocab', icon: '🎴', tag: '生词', t: '背 ' + picks.length + ' 个自己存的词',
+        s: picks.slice(0, 6).map(function (x) { return x.word; }).join('、') + (picks.length > 6 ? ' …' : ''),
+        b: '开始背', go: function () { $('dpwrap').classList.add('hidden'); fcFromVocab(picks); } });
+    } else {
+      var ci = read.length ? chIndexByKey(read[0].key) : (nxt >= 0 ? nxt : 0);
+      items.push({ k: 'vocab', icon: '🎴', tag: '词卡', t: '背这一章的词卡',
+        s: '生词本还不到 5 个词。看书时点任意法语单词，卡片右下角能存进去，攒起来以后就背自己的。',
+        b: '打开背诵', go: function () { planGo(ci, fcOpen); } });
+    }
+
+    // ⑤ 开口 90 秒
+    var tps = DOC.topics || [];
+    if (tps.length) {
+      var tp = tps[Math.floor(Rtalk() * tps.length)], es = tp.entries || [], three = [];
+      while (three.length < 3 && es.length) {
+        var e = es[Math.floor(Rtalk() * es.length)];
+        if (three.indexOf(e) < 0) three.push(e);
+      }
+      items.push({ k: 'talk', icon: '🗣', tag: '口语', t: 'Tâche 3 · ' + tp.zh + '，说满 90 秒',
+        s: '录下来再回放。至少用上：' + three.map(function (x) { return x.phrase; }).join(' / '),
+        b: '打开话题库', go: function () { planGo(chIndexByKey('__topics__')); } });
+    }
+    return items;
+  }
+
+  function planRender() {
+    var p = store.get('plan', {});
+    if (p.day !== PLAN.day) p = { day: PLAN.day, done: {} };
+    var s = window.tcfStats;
+    var sec = s && s.dayStat ? s.dayStat().sec : 0;
+    var stk = s && s.streak ? s.streak() : 0;
+    var nDone = PLAN.items.filter(function (it) { return p.done[it.k]; }).length;
+
+    var h = ['<div class="dpsum">' +
+      '<div class="dpring' + (nDone >= PLAN.items.length ? ' full' : '') + '">' + nDone + '<i>/' + PLAN.items.length + '</i></div>' +
+      '<div class="dpst"><b>' + (nDone >= PLAN.items.length ? '今天的都做完了 🎉' : '今天还剩 ' + (PLAN.items.length - nDone) + ' 件') + '</b>' +
+      '<span>' + (sec < 30 ? '今天还没开始' : '今天已学 ' + s.mins(sec)) +
+      (stk > 0 ? '　·　🔥 连续 ' + stk + ' 天' : '') + '</span></div></div>'];
+
+    h.push('<div class="dplist">' + PLAN.items.map(function (it, i) {
+      var ok = !!p.done[it.k];
+      return '<div class="dpi' + (ok ? ' ok' : '') + '">' +
+        '<button class="dpck" data-tick="' + it.k + '" title="标记完成">' + (ok ? '✓' : '') + '</button>' +
+        '<div class="dpc"><div class="dpt"><span class="dpg">' + it.icon + ' ' + it.tag + '</span>' + esc(it.t) + '</div>' +
+        (it.s ? '<div class="dps">' + esc(it.s) + '</div>' : '') + '</div>' +
+        '<button class="btn dpb2" data-plango="' + i + '">' + esc(it.b) + '</button></div>';
+    }).join('') + '</div>');
+
+    h.push('<div class="dpfoot">清单每天早上按你自己的记录重排——看得最久没回头的、还没读的、还没点开过的。' +
+           '做不完不要紧，做一条也比不做强。</div>');
+    $('dpBody').innerHTML = h.join('');
+    $('dpDate').textContent = PLAN.day;
+    var dot = $('planDot');
+    if (dot) dot.classList.toggle('hidden', nDone >= PLAN.items.length);
+  }
+
+  // the dot has to appear without building the whole plan first
+  function planPeek() {
+    var p = store.get('plan', {});
+    var keys = ['review', 'new', 'res', 'vocab', 'talk'];
+    var undone = p.day !== PLAN.day || keys.some(function (k) { return !(p.done || {})[k]; });
+    var dot = $('planDot');
+    if (dot) dot.classList.toggle('hidden', !undone);
+  }
+  function planOpen() {
+    PLAN.day = dayKey();
+    $('dpwrap').classList.remove('hidden');
+    $('dpBody').innerHTML = '<div class="vbe">正在排今天的计划…</div>';
+    fetch('/api/vocab/list').then(function (r) { return r.json(); })
+      .catch(function () { return []; })
+      .then(function (v) {
+        PLAN.items = planBuild(v || []);
+        planRender();
+      });
+  }
+  $('btnPlan').onclick = planOpen;
+  $('dpClose').onclick = function () { $('dpwrap').classList.add('hidden'); };
+  $('dpBody').addEventListener('click', function (e) {
+    var g = e.target.closest('[data-plango]');
+    if (g) { var it = PLAN.items[+g.dataset.plango]; if (it && it.go) it.go(); return; }
+    var t = e.target.closest('[data-tick]');
+    if (t) {
+      var p = store.get('plan', {});
+      if (p.day !== PLAN.day) p = { day: PLAN.day, done: {} };
+      p.done[t.dataset.tick] = p.done[t.dataset.tick] ? 0 : 1;
+      store.set('plan', p);
+      planRender();
+      return;
+    }
+  });
+
   /* ---------------- study log ----------------
      Everything below reads from localStorage only; nothing is uploaded. She sees
      her own numbers, and can copy a summary to send if she wants to. */
@@ -737,10 +950,10 @@
     else if (window.tcfLookup) window.tcfLookup.play(it.fr);   // saved words live in the word pack
   };
   $('pPlay').onclick = function () {
-    if (au.paused) { if (au.src) { au.play(); this.textContent = '⏸'; } else startQueue(currentClips(), 0); }
+    if (au.paused) { if (ARMED && au.src) { au.play(); this.textContent = '⏸'; } else startQueue(currentClips(), 0); }
     else { au.pause(); this.textContent = '▶'; }
   };
-  $('pStop').onclick = function () { au.pause(); au.currentTime = 0; QI = -1; clearHL(); $('pPlay').textContent = '▶'; };
+  $('pStop').onclick = function () { stopAll(); };
   $('pNext').onclick = function () { if (QI >= 0 && QI < QUEUE.length - 1) { QI++; playQueueItem(); } };
   $('pPrev').onclick = function () { if (QI > 0) { QI--; playQueueItem(); } };
   $('btnRepeat').onclick = function () { REPEAT = !REPEAT; this.classList.toggle('on', REPEAT); toast(REPEAT ? '复读开：每句念两遍' : '复读关'); };
@@ -856,11 +1069,17 @@
       h.push('<div class="navitem" data-i="' + i + '"><span class="n">' + c.no + '</span><span class="t">' + esc(c.zh) + '</span></div>');
     });
     $('nav').innerHTML = h.join('');
-    if (!CAN_OPUS) {
-      document.body.classList.add('nosound');
-      $('nosound').innerHTML = '🔇 <b>这个浏览器放不出本站的发音。</b><br>' +
-        '绝大部分音频是 Opus 格式，Safari 要 <b>iOS 17.4 / macOS 14.4</b> 以上才支持。' +
-        '请升级系统，或换 Chrome / Edge 打开，课文和词典不受影响。';
+    /* the welcome screen used to hard-code how many resources there were, and said 91
+       long after there were 168; count them instead so it cannot drift again */
+    var wr = $('wcRes');
+    if (wr) {
+      var nres = 0, nemb = 0;
+      d.chapters.forEach(function (c) {
+        (c.blocks || []).forEach(function (b) {
+          (b.links || []).forEach(function (x) { nres++; if (x.embed) nemb++; });
+        });
+      });
+      if (nres) wr.textContent = nres + ' 条里 ' + nemb + ' 条能直接在站内播，每一条';
     }
     if (store.get('dark', false)) document.body.classList.add('dark');
     RATE = store.get('rate', 1);
@@ -869,5 +1088,18 @@
     renderChapter(last);
     markVisited();
     if (last > 0) toast('接着上次：第 ' + d.chapters[last].no + ' 章');
+    var sec0 = window.tcfStats && window.tcfStats.dayStat ? window.tcfStats.dayStat().sec : 1;
+    if (!$('welcome') || $('welcome').classList.contains('hidden')) {
+      if (sec0 < 30 && store.get('planShown', '') !== dayKey()) {
+        store.set('planShown', dayKey());
+        setTimeout(planOpen, 700);
+      } else { PLAN.day = dayKey(); planPeek(); }
+    }
+  }).catch(function () {
+    $('wrap').innerHTML = '<div class="loadfail"><div class="lf-i">📡</div>' +
+      '<div class="lf-t">课文没能载入</div>' +
+      '<div class="lf-s">多半是网络断了。连上网之后点下面重试；<br>如果之前完整打开过一次，离线也应该能进。</div>' +
+      '<button class="btn pri" id="lfGo">重新载入</button></div>';
+    $('lfGo').onclick = function () { location.reload(); };
   });
 })();

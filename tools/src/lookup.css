@@ -1,0 +1,43 @@
+/* click-a-word card */
+.wpop{position:fixed;z-index:400;width:330px;max-width:calc(100vw - 16px);
+      max-height:min(72vh,540px);overflow-y:auto;-webkit-overflow-scrolling:touch;
+      background:var(--card);border:1px solid var(--line);border-radius:12px;
+      box-shadow:0 10px 34px rgba(16,24,40,.22);padding:13px 15px;font-size:14px;line-height:1.6}
+body.dark .wpop{box-shadow:0 10px 34px rgba(0,0,0,.5)}
+.wp-head{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.wp-say{border:0;background:var(--accent-soft);color:var(--accent);border-radius:8px;
+        width:30px;height:30px;cursor:pointer;font-size:15px;flex:0 0 auto}
+@media (hover:hover){.wp-say:hover{background:var(--accent);color:#fff}}
+.wp-w{font-size:19px;flex:1;word-break:break-word}
+.wp-pos{font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+.wp-lv{font-size:11px;background:var(--accent);color:#fff;border-radius:5px;padding:1px 6px}
+.wp-x{cursor:pointer;color:var(--muted);font-size:15px;padding:0 2px}
+@media (hover:hover){.wp-x:hover{color:var(--ink)}}
+.wp-lemma{font-size:12.5px;color:var(--muted);margin-bottom:5px}
+.wp-zh{font-size:15px;font-weight:600;margin-bottom:9px}
+.wp-sec{font-size:11.5px;color:var(--accent);font-weight:700;margin:9px 0 4px;letter-spacing:.5px}
+.wp-c{display:flex;gap:8px;padding:3px 0;align-items:baseline}
+.wp-c .cf{flex:1;font-style:italic;cursor:pointer;border-bottom:1px dotted var(--line)}
+@media (hover:hover){.wp-c .cf:hover{color:var(--accent);border-bottom-color:var(--accent)}}
+.wp-c .cz{color:var(--muted);font-size:12.5px;flex:0 0 auto;max-width:44%;text-align:right}
+.wp-note{background:#fdf4e6;border-left:2.5px solid #e8a33d;border-radius:7px;
+         padding:7px 10px;margin-top:9px;font-size:12.5px;line-height:1.55}
+body.dark .wp-note{background:#3a2f18}
+.wp-ex{margin-top:9px;font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:7px}
+.wp-none{color:var(--muted);font-size:13px;margin:4px 0 8px}
+.wp-foot{margin-top:10px;text-align:right}
+.wp-add{border:1px solid var(--line);background:var(--card);color:var(--ink);
+        border-radius:8px;padding:5px 11px;font-size:12.5px;cursor:pointer;font-family:inherit}
+@media (hover:hover){.wp-add:hover{border-color:var(--accent);color:var(--accent)}}
+
+/* conjugation trace: which verb and which tense this form belongs to */
+.wp-conj{background:var(--accent-soft);border-radius:8px;padding:7px 9px;margin:2px 0 9px}
+.wp-cj{font-size:12.5px;line-height:1.65}
+.wp-cj + .wp-cj{margin-top:5px;padding-top:5px;border-top:1px dashed var(--line)}
+.wp-role{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.wp-cex{display:block;font-style:italic;cursor:pointer;color:var(--accent)}
+@media (hover:hover){.wp-cex:hover{text-decoration:underline}}
+
+/* French text advertises that it is clickable */
+.frtext,.mline,.passage .body,.dtx .dfr,.pcard .ph,.pcard .ex,.b-card .cf{cursor:text}
+@media (hover:hover){.frtext:hover,.mline:hover{background:var(--accent-soft);border-radius:3px}}

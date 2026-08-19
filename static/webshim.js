@@ -8,8 +8,8 @@
     '/api/dict/audio-index': 'data/word_index.json',
     '/api/conj': 'data/conj_index.json'
   };
-  var MP3 = window.__MP3 || {};
-  window.CLIP = function (id) { return 'clip/' + id + (MP3[id] ? '.mp3' : '.opus'); };
+  var ALL = !!window.__ALLMP3, MP3 = window.__MP3 || {};
+  window.CLIP = function (id) { return 'clip/' + id + (ALL || MP3[id] ? '.mp3' : '.opus'); };
 
   var KEY = 'tcf_vocab';
   function vocab() {

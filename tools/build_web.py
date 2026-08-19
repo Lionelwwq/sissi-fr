@@ -40,9 +40,13 @@ for zname in ("audio.zip", "words.zip", "conj.zip"):
             n += 1
 print("clips extracted:", n, "of which mp3:", len(mp3))
 
-# a synchronous lookup: the audio element needs the extension before any fetch resolves
-write(os.path.join(WEB, "static", "mp3ids.js"),
-      "window.__MP3=" + json.dumps(mp3, separators=(",", ":")) + ";\n")
+# a synchronous lookup: the audio element needs the extension before any fetch resolves.
+# Once every clip is mp3 the lookup table is 350 kB of the same answer, so drop it.
+if len(mp3) == n:
+    write(os.path.join(WEB, "static", "mp3ids.js"), "window.__ALLMP3=1;\n")
+else:
+    write(os.path.join(WEB, "static", "mp3ids.js"),
+          "window.__MP3=" + json.dumps(mp3, separators=(",", ":")) + ";\n")
 
 # ---------------------------------------------------------------- data
 shutil.copy(os.path.join(DATA, "content.json"), os.path.join(WEB, "data", "content.json"))
@@ -59,13 +63,19 @@ app = read(os.path.join(SRC, "app.js"))
 old = "au.src = '/audio/' + aid;"
 assert app.count(old) == 1, app.count(old)
 app = app.replace(old, "au.src = window.CLIP(aid);")
+assert "'/audio/" not in app, "app.js still has a server path"
 write(os.path.join(WEB, "static", "app.js"), app)
 
 lk = read(os.path.join(SRC, "lookup.js"))
 for a, b in (("au.src = '/word/' + id;", "au.src = window.CLIP(id);"),
-             ("au.src = '/word/' + ids[i++];", "au.src = window.CLIP(ids[i++]);")):
+             ("au.src = '/word/' + ids[i++];", "au.src = window.CLIP(ids[i++]);"),
+             # long-press-to-play-a-sentence: missing this one made the gesture the welcome
+             # screen teaches silently dead on the hosted copy, while the exe stayed fine
+             ("au.src = '/audio/' + aid;", "au.src = window.CLIP(aid);")):
     assert lk.count(a) == 1, (a, lk.count(a))
     lk = lk.replace(a, b)
+# nothing may reach for a server path any more, whatever gets added later
+assert "'/word/" not in lk and "'/audio/" not in lk, "lookup.js still has a server path"
 write(os.path.join(WEB, "static", "lookup.js"), lk)
 
 SHIM = """/* Static-hosting shim: maps the desktop app's endpoints onto plain files.
@@ -78,8 +88,8 @@ SHIM = """/* Static-hosting shim: maps the desktop app's endpoints onto plain fi
     '/api/dict/audio-index': 'data/word_index.json',
     '/api/conj': 'data/conj_index.json'
   };
-  var MP3 = window.__MP3 || {};
-  window.CLIP = function (id) { return 'clip/' + id + (MP3[id] ? '.mp3' : '.opus'); };
+  var ALL = !!window.__ALLMP3, MP3 = window.__MP3 || {};
+  window.CLIP = function (id) { return 'clip/' + id + (ALL || MP3[id] ? '.mp3' : '.opus'); };
 
   var KEY = 'tcf_vocab';
   function vocab() {
@@ -123,26 +133,39 @@ write(os.path.join(WEB, "static", "webshim.js"), SHIM)
 
 # ---------------------------------------------------------------- offline
 SW = """/* Service worker: she studies on the subway, where the site simply did not open.
-   Shell is precached; content and clips are cached the first time they are used. */
+
+   Three things this has to get right, each of which it got wrong once:
+   - the book itself is precached, not merely cached on use, or the very first
+     offline open sits on the loading spinner forever;
+   - clips live in a bucket with no version in its name, because they never change
+     and wiping 160 MB of downloaded audio over a one-line CSS edit is unforgivable;
+   - the precache bypasses the HTTP cache, or a release published inside GitHub
+     Pages' ten-minute max-age window pins the *old* files under the *new* version.
+*/
 var V = 'tcf-__VER__';
+var CLIPS = 'tcf-clip';
 var SHELL = ['./', './index.html', './static/app.css', './static/app.js',
              './static/lookup.css', './static/lookup.js',
-             './static/webshim.js', './static/mp3ids.js', './static/stats.js'];
+             './static/webshim.js', './static/mp3ids.js', './static/stats.js',
+             './data/content.json', './data/dict.json',
+             './data/word_index.json', './data/conj_index.json'];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(V + '-shell').then(function (c) { return c.addAll(SHELL); })
-    .then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(V + '-shell').then(function (c) {
+    return c.addAll(SHELL.map(function (u) { return new Request(u, { cache: 'reload' }); }));
+  }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (e) {
+  var keep = [V + '-shell', CLIPS];
   e.waitUntil(caches.keys().then(function (ks) {
-    return Promise.all(ks.filter(function (k) { return k.indexOf(V) !== 0; })
+    return Promise.all(ks.filter(function (k) { return keep.indexOf(k) < 0; })
                          .map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 
 function cacheFirst(req, bucket) {
-  return caches.open(V + '-' + bucket).then(function (c) {
+  return caches.open(bucket).then(function (c) {
     return c.match(req).then(function (hit) {
       if (hit) return hit;
       return fetch(req).then(function (res) {
@@ -158,13 +181,12 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
   if (url.origin !== location.origin) return;
-  if (url.pathname.indexOf('/clip/') >= 0) { e.respondWith(cacheFirst(req, 'clip')); return; }
-  if (url.pathname.indexOf('/data/') >= 0) { e.respondWith(cacheFirst(req, 'data')); return; }
+  if (url.pathname.indexOf('/clip/') >= 0) { e.respondWith(cacheFirst(req, CLIPS)); return; }
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req).catch(function () { return caches.match('./index.html'); }));
     return;
   }
-  e.respondWith(cacheFirst(req, 'shell'));
+  e.respondWith(cacheFirst(req, V + '-shell'));
 });
 """
 
