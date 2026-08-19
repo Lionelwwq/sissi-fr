@@ -1,9 +1,9 @@
 /* Service worker: she studies on the subway, where the site simply did not open.
    Shell is precached; content and clips are cached the first time they are used. */
-var V = 'tcf-a4986c21';
+var V = 'tcf-c54ea8b3';
 var SHELL = ['./', './index.html', './static/app.css', './static/app.js',
              './static/lookup.css', './static/lookup.js',
-             './static/webshim.js', './static/mp3ids.js'];
+             './static/webshim.js', './static/mp3ids.js', './static/stats.js'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(V + '-shell').then(function (c) { return c.addAll(SHELL); })

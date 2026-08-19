@@ -1,0 +1,148 @@
+/* 学习记录 —— 全部存在本机浏览器里，不上传任何地方。
+   She can read it herself, and export a short summary to send if she wants to.
+   Nothing here leaves the device on its own: this is a study log, not telemetry. */
+(function () {
+  'use strict';
+  var KEY = 'tcf_stats_v1';
+  var CAP = 400;                       // keep the recent trail bounded
+
+  function blank() {
+    return { chapters: {}, days: {}, words: {}, links: [], recent: [],
+             audio: 0, flash: 0, searches: 0, firstTs: Date.now() };
+  }
+  var S = null;
+  function load() {
+    if (S) return S;
+    try { S = JSON.parse(localStorage.getItem(KEY)) || blank(); }
+    catch (e) { S = blank(); }
+    for (var k in blank()) if (S[k] === undefined) S[k] = blank()[k];
+    return S;
+  }
+  var saveTimer = null;
+  function save() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      try { localStorage.setItem(KEY, JSON.stringify(S)); }
+      catch (e) {                       // quota: drop the trail, keep the totals
+        S.recent = S.recent.slice(-60);
+        S.links = S.links.slice(-60);
+        try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e2) {}
+      }
+    }, 400);
+  }
+
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function day() {
+    load();
+    if (!S.days[today()]) S.days[today()] = { sec: 0, audio: 0, words: 0, links: 0 };
+    return S.days[today()];
+  }
+  function trail(kind, text) {
+    load();
+    S.recent.push({ t: Date.now(), k: kind, x: String(text || '').slice(0, 90) });
+    if (S.recent.length > CAP) S.recent = S.recent.slice(-CAP);
+  }
+
+  /* ---- dwell time per chapter ---- */
+  var cur = null, since = 0;
+  function closeOut() {
+    if (!cur) return;
+    var sec = Math.round((Date.now() - since) / 1000);
+    if (sec > 2 && sec < 3600) {          // ignore flicks and forgotten tabs
+      load();
+      var c = S.chapters[cur.key] || (S.chapters[cur.key] = { no: cur.no, zh: cur.zh, sec: 0, opens: 0 });
+      c.sec += sec; c.zh = cur.zh; c.no = cur.no;
+      day().sec += sec;
+      S.lastTs = Date.now();
+      save();
+    }
+    cur = null;
+  }
+  function view(ch) {
+    closeOut();
+    load();
+    var key = ch.key || ('ch' + ch.no);
+    var c = S.chapters[key] || (S.chapters[key] = { no: ch.no, zh: ch.zh, sec: 0, opens: 0 });
+    c.opens++; c.no = ch.no; c.zh = ch.zh;
+    cur = { key: key, no: ch.no, zh: ch.zh };
+    since = Date.now();
+    S.lastTs = Date.now();
+    trail('章', '第' + ch.no + '章 ' + ch.zh);
+    save();
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) closeOut(); else if (cur) since = Date.now();
+  });
+  window.addEventListener('pagehide', closeOut);
+
+  /* ---- individual actions ---- */
+  function audio(label) { load(); S.audio++; day().audio++; save(); }
+  function word(w) {
+    load();
+    w = String(w || '').toLowerCase();
+    if (!w) return;
+    S.words[w] = (S.words[w] || 0) + 1;
+    day().words++;
+    trail('词', w);
+    save();
+  }
+  function link(title, url) {
+    load();
+    S.links.push({ t: Date.now(), title: String(title || '').slice(0, 80), url: url });
+    if (S.links.length > CAP) S.links = S.links.slice(-CAP);
+    day().links++;
+    trail('打开', title);
+    save();
+  }
+  function flash(n) { load(); S.flash++; trail('背诵', n + ' 张'); save(); }
+  function search(q) { load(); S.searches++; trail('搜索', q); save(); }
+
+  /* ---- readable summary ---- */
+  function mins(sec) {
+    if (sec < 60) return sec + ' 秒';
+    if (sec < 3600) return Math.round(sec / 60) + ' 分钟';
+    return (sec / 3600).toFixed(1) + ' 小时';
+  }
+  function stamp(ts) {
+    var d = new Date(ts);
+    return ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) + ' ' +
+           ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  function summary() {
+    load();
+    var days = Object.keys(S.days).sort();
+    var total = 0, active = 0;
+    days.forEach(function (d) { total += S.days[d].sec; if (S.days[d].sec > 60) active++; });
+    var chs = Object.keys(S.chapters).map(function (k) { return S.chapters[k]; })
+                    .sort(function (a, b) { return b.sec - a.sec; });
+    var ws = Object.keys(S.words).map(function (w) { return { w: w, n: S.words[w] }; })
+                   .sort(function (a, b) { return b.n - a.n; });
+    return { days: days, total: total, activeDays: active, chapters: chs, words: ws,
+             links: S.links.slice().reverse(), audio: S.audio, flash: S.flash,
+             searches: S.searches, last: S.lastTs, since: S.firstTs, recent: S.recent.slice().reverse() };
+  }
+  function asText() {
+    var s = summary();
+    var L = ['王思 · 学习记录',
+             '统计区间：' + (s.days[0] || '—') + ' 起，共 ' + s.activeDays + ' 个有效学习日',
+             '累计时长：' + mins(s.total) + '　发音播放 ' + s.audio + ' 次　查词 ' +
+               Object.keys(S.words).length + ' 个　背诵 ' + s.flash + ' 轮',
+             '最近一次：' + (s.last ? stamp(s.last) : '—'), '', '【看得最多的章节】'];
+    s.chapters.slice(0, 8).forEach(function (c) {
+      L.push('  第' + c.no + '章 ' + c.zh + ' —— ' + mins(c.sec) + '，进入 ' + c.opens + ' 次');
+    });
+    L.push('', '【打开过的视频 / 资源】');
+    if (!s.links.length) L.push('  （还没点开过）');
+    s.links.slice(0, 15).forEach(function (x) { L.push('  ' + stamp(x.t) + '  ' + x.title); });
+    L.push('', '【查得最多的词】');
+    L.push('  ' + (s.words.slice(0, 20).map(function (x) { return x.w + '×' + x.n; }).join('、') || '—'));
+    return L.join('\n');
+  }
+
+  window.tcfStats = { view: view, audio: audio, word: word, link: link, flash: flash,
+                      search: search, summary: summary, asText: asText, mins: mins,
+                      stamp: stamp, reset: function () { S = blank(); save(); } };
+})();

@@ -108,6 +108,7 @@
       }).catch(function () { serverGone(); });
     });
     highlight(aid);
+    if (window.tcfStats) window.tcfStats.audio(label);
     $('pNow').textContent = label || '正在播放…';
     $('pPlay').textContent = '⏸';
   }
@@ -286,6 +287,7 @@
     if (window.__markScrollables) window.__markScrollables();
     document.querySelectorAll('.navitem').forEach(function (e) { e.classList.toggle('on', +e.dataset.i === i); });
     store.set('last', i);
+    if (window.tcfStats) window.tcfStats.view(c);
     var done = store.get('done', {});
     if (!done[c.key || i]) { done[c.key || i] = 1; store.set('done', done); }
     markVisited();
@@ -374,7 +376,9 @@
     stopAll();               // a running chapter queue would talk over every card
     FC.list = fcBuild(); FC.i = 0;
     if (!FC.list.length) { toast(VIEW === 'search' ? '搜索结果里没有可背诵的词卡' : '本章没有可背诵的词卡'); return; }
-    $('fcwrap').classList.remove('hidden'); fcShow();
+    $('fcwrap').classList.remove('hidden');
+    if (window.tcfStats) window.tcfStats.flash(FC.list.length);
+    fcShow();
   }
   function fcClose() { $('fcwrap').classList.add('hidden'); stopAll(); }
 
@@ -415,6 +419,7 @@
       });
     });
     HITS = hits.slice(0, 300);
+    if (window.tcfStats) window.tcfStats.search(q);
     var h = ['<div class="chead" style="background:linear-gradient(120deg,#334155,#334155bb)">' +
       '<div class="cno">搜索结果 · RECHERCHE</div><h1>「' + esc(q) + '」共 ' + hits.length + ' 条</h1></div>'];
     HITS.forEach(function (x) {
@@ -466,6 +471,10 @@
       startQueue(list, 0);
       return;
     }
+    var lc = t.closest('.lcard');
+    if (lc && window.tcfStats) {
+      window.tcfStats.link(lc.querySelector('.lt').textContent, lc.getAttribute('href'));
+    }
     var nv = t.closest('.navitem');
     if (nv) {
       clearTimeout(qt);            // a pending debounce would repaint search results over the chapter
@@ -500,6 +509,69 @@
     fetch('/api/vocab/list').then(function (r) { return r.json(); }).then(vbRender)
       .catch(function () { $('vbList').innerHTML = '<div class="vbe">读不出来，程序可能已经退出了。</div>'; });
   }
+  /* ---------------- study log ----------------
+     Everything below reads from localStorage only; nothing is uploaded. She sees
+     her own numbers, and can copy a summary to send if she wants to. */
+  function stRender() {
+    if (!window.tcfStats) { $('stBody').innerHTML = '<div class="vbe">记录功能没加载</div>'; return; }
+    var s = window.tcfStats.summary(), M = window.tcfStats.mins, T = window.tcfStats.stamp;
+    var todayKey = new Date().toISOString().slice(0, 10);
+    var h = [];
+    h.push('<div class="stcards">' +
+      '<div class="stc"><b>' + M(s.total) + '</b><span>累计学习</span></div>' +
+      '<div class="stc"><b>' + s.activeDays + ' 天</b><span>有效学习日</span></div>' +
+      '<div class="stc"><b>' + s.audio + '</b><span>播放发音</span></div>' +
+      '<div class="stc"><b>' + s.words.length + '</b><span>查过的词</span></div></div>');
+    if (s.last) h.push('<div class="stnote">最近一次：' + T(s.last) + '</div>');
+
+    h.push('<div class="stsec">看得最多的章节</div>');
+    if (!s.chapters.length) h.push('<div class="vbe">还没有记录</div>');
+    else h.push('<div class="stlist">' + s.chapters.slice(0, 10).map(function (c) {
+      var w = Math.max(3, Math.round(c.sec / s.chapters[0].sec * 100));
+      return '<div class="stbar"><div class="stbt">第' + c.no + '章 ' + esc(c.zh) + '</div>' +
+             '<div class="stbg"><i style="width:' + w + '%"></i></div>' +
+             '<div class="stbv">' + M(c.sec) + ' · ' + c.opens + ' 次</div></div>';
+    }).join('') + '</div>');
+
+    h.push('<div class="stsec">打开过的视频 / 资源</div>');
+    if (!s.links.length) h.push('<div class="vbe">还没点开过第 30 章里的资源</div>');
+    else h.push('<div class="stlist">' + s.links.slice(0, 20).map(function (x) {
+      return '<div class="stlink"><span class="stts">' + T(x.t) + '</span>' +
+             '<a href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' + esc(x.title) + '</a></div>';
+    }).join('') + '</div>');
+
+    h.push('<div class="stsec">查得最多的词</div>');
+    h.push('<div class="stwords">' + (s.words.slice(0, 30).map(function (x) {
+      return '<span class="stw">' + esc(x.w) + '<i>' + x.n + '</i></span>';
+    }).join('') || '<div class="vbe">还没查过词</div>') + '</div>');
+
+    h.push('<div class="stsec">最近做了什么</div>');
+    h.push('<div class="stlist">' + (s.recent.slice(0, 25).map(function (r) {
+      return '<div class="strec"><span class="stts">' + T(r.t) + '</span>' +
+             '<span class="stk">' + esc(r.k) + '</span>' + esc(r.x) + '</div>';
+    }).join('') || '<div class="vbe">—</div>') + '</div>');
+
+    h.push('<div class="stfoot">这些记录只存在这台设备的浏览器里，<b>不会自动发给任何人</b>。' +
+           '想让 Lionel 看到进度，点右上角「复制摘要」再粘贴给他。</div>');
+    $('stBody').innerHTML = h.join('');
+  }
+  $('btnStats').onclick = function () { stRender(); $('stwrap').classList.remove('hidden'); };
+  $('stClose').onclick = function () { $('stwrap').classList.add('hidden'); };
+  $('stCopy').onclick = function () {
+    var txt = window.tcfStats ? window.tcfStats.asText() : '';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function () { toast('已复制，粘贴到微信发给 Lionel 就行'); })
+        .catch(function () { stFallback(txt); });
+    } else stFallback(txt);
+  };
+  function stFallback(txt) {
+    // clipboard API needs a secure context and permission; a selectable box always works
+    $('stBody').innerHTML = '<div class="stnote">长按下面的文字全选复制：</div>' +
+      '<textarea class="stta" readonly>' + esc(txt) + '</textarea>';
+    var ta = document.querySelector('.stta');
+    ta.focus(); ta.select();
+  }
+
   $('btnVocab').onclick = vbOpen;
   /* on a phone the search box lives inside the drawer, so it took two steps to find */
   $('btnSearch').onclick = function () { drawer(true); setTimeout(function () { $('q').focus(); }, 60); };

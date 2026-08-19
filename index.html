@@ -27,6 +27,7 @@
       <button class="btn" id="btnCards">🎴 背诵<span class="lbl">模式</span></button>
       <button class="btn" id="btnVocab">📒 生词本</button>
       <button class="btn only-phone" id="btnSearch" title="搜索">🔍</button>
+      <button class="btn" id="btnStats" title="学习记录">📊</button>
       <div class="seg" id="segSpeed">
         <button data-r="0.75">0.75×</button><button data-r="1" class="on">1×</button><button data-r="1.25">1.25×</button>
       </div>
@@ -84,13 +85,21 @@
       <div class="wc-i"><b>🔊 朗读本段/本章</b><span>连着播，可以当听力放着听</span></div>
       <div class="wc-i"><b>🎴 背诵模式</b><span>看法语猜中文，答错的会再出现</span></div>
     </div>
-    <div class="wc-t">左上角 ☰ 打开目录，共 54 章。想找什么直接用 🔍 搜，中法文都能搜。</div>
+    <div class="wc-t">左上角 ☰ 打开目录，共 56 章。想找什么直接用 🔍 搜，中法文都能搜。<br>第 30 章是<b>视频与听力资源库</b>，91 条都验证过、标了国内点不点得开。<br><b>📊 学习记录</b>会记下你看了哪章、查了哪些词、点开过哪些视频——只存在这台设备上，<b>不会自动发给任何人</b>。</div>
     <button class="btn pri" id="wcGo">开始</button>
+  </div>
+</div>
+
+<div id="stwrap" class="hidden">
+  <div class="st">
+    <div class="sth"><b>📊 学习记录</b><span class="spacer"></span><button class="btn" id="stCopy">复制摘要</button><button class="btn" id="stClose">✕ 关闭</button></div>
+    <div id="stBody" class="stb"></div>
   </div>
 </div>
 
 <div id="toast"></div>
 <audio id="au"></audio>
+<script src="static/stats.js"></script>
 <script src="static/mp3ids.js"></script>
 <script src="static/webshim.js"></script>
 <script src="static/app.js"></script>

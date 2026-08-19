@@ -52,6 +52,7 @@ shutil.copy(os.path.join(DATA, "conj_index.json"), os.path.join(WEB, "data", "co
 
 # ---------------------------------------------------------------- js / css
 shutil.copy(os.path.join(SRC, "app.css"), os.path.join(WEB, "static", "app.css"))
+shutil.copy(os.path.join(SRC, "stats.js"), os.path.join(WEB, "static", "stats.js"))
 shutil.copy(os.path.join(SRC, "lookup.css"), os.path.join(WEB, "static", "lookup.css"))
 
 app = read(os.path.join(SRC, "app.js"))
@@ -126,7 +127,7 @@ SW = """/* Service worker: she studies on the subway, where the site simply did 
 var V = 'tcf-__VER__';
 var SHELL = ['./', './index.html', './static/app.css', './static/app.js',
              './static/lookup.css', './static/lookup.js',
-             './static/webshim.js', './static/mp3ids.js'];
+             './static/webshim.js', './static/mp3ids.js', './static/stats.js'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(V + '-shell').then(function (c) { return c.addAll(SHELL); })
@@ -195,7 +196,7 @@ write(os.path.join(WEB, "index.html"), html)
 # stale lookup.js / app.css after a deploy that only touched those
 h = hashlib.md5()
 for f in ("index.html", "static/app.js", "static/app.css", "static/lookup.js",
-          "static/lookup.css", "static/webshim.js", "static/mp3ids.js"):
+          "static/lookup.css", "static/webshim.js", "static/mp3ids.js", "static/stats.js"):
     h.update(read(os.path.join(WEB, f)).encode("utf-8"))
 ver = h.hexdigest()[:8]
 write(os.path.join(WEB, "sw.js"), SW.replace("__VER__", ver))

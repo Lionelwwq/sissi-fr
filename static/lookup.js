@@ -195,6 +195,7 @@
   function lookup(word, x, y, extra) {
     load().then(function () {
       playWord(word);                    // sound first: that is what she clicked for
+      if (window.tcfStats) window.tcfStats.word(word);
       card(DICT[keyOf(word)], word, x, y, extra);
     });
   }
