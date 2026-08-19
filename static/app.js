@@ -304,6 +304,15 @@
         '<div class="cintro"><b>本章导读　</b>' + esc(c.intro) + '</div>' +
         renderBlocks(c.blocks, c.color);
     }
+    /* on a phone, moving to the next chapter meant opening the drawer and hunting
+       for the right row every single time */
+    var prev = DOC.chapters[i - 1], next = DOC.chapters[i + 1];
+    w.innerHTML += '<div class="chnav">' +
+      (prev ? '<button class="chn" data-go="' + (i - 1) + '"><span>← 上一章</span>' +
+              '<b>' + esc(prev.zh) + '</b></button>' : '<span></span>') +
+      (next ? '<button class="chn nx" data-go="' + (i + 1) + '"><span>下一章 →</span>' +
+              '<b>' + esc(next.zh) + '</b></button>' : '<span></span>') +
+      '</div>';
     $('main').scrollTop = 0;
     if (window.__markScrollables) window.__markScrollables();
     document.querySelectorAll('.navitem').forEach(function (e) { e.classList.toggle('on', +e.dataset.i === i); });
@@ -363,6 +372,21 @@
     }
     return list;
   }
+  /* 「＋ 加入生词本」 collected words she could look at but never drill — the list was
+     a dead end. Same flashcard machinery, fed from her own saved words. */
+  function fcFromVocab(items) {
+    stopAll();
+    FC.list = items.filter(function (x) { return x.word; }).map(function (x) {
+      return { fr: x.word, zh: x.gloss || '（没有释义）', note: x.lemma && x.lemma !== x.word ? '原形 ' + x.lemma : '',
+               exf: x.sentence || '', aid: null, vocab: true };
+    });
+    FC.i = 0;
+    if (!FC.list.length) { toast('生词本还是空的'); return; }
+    $('vbwrap').classList.add('hidden');
+    $('fcwrap').classList.remove('hidden');
+    if (window.tcfStats) window.tcfStats.flash(FC.list.length);
+    fcShow();
+  }
   function fcShow() {
     var it = FC.list[FC.i];
     if (!it) { fcClose(); toast('本轮结束，做得好！'); return; }
@@ -373,6 +397,8 @@
     $('fcZh').textContent = '';
     $('fcEx').classList.add('hidden');
     if (it.aid) play(it.aid, it.fr.slice(0, 60));
+    // saved words have no chapter clip; they play from the word pack instead
+    else if (it.vocab && window.tcfLookup) window.tcfLookup.play(it.fr);
   }
   function fcReveal() {
     var it = FC.list[FC.i]; if (!it) return;
@@ -423,6 +449,16 @@
       seen[k] = 1;
       hits.push({ ch: ch, fr: fr, zh: zh || '', aid: aid });
     }
+    // a resource matches on its title, platform and blurb, and links out instead of playing
+    function pushLink(ch, x) {
+      var hay = [x.title, x.platform, x.kind, x.why, x.how, x.accent, x.level].join(' ').toLowerCase();
+      if (hay.indexOf(q) < 0) return;
+      var k = 'L|' + x.url;
+      if (seen[k]) return;
+      seen[k] = 1;
+      hits.push({ ch: ch, fr: x.title, zh: x.why || '', url: x.url, level: x.level,
+                  meta: [x.platform, x.kind, x.length].filter(Boolean).join(' · ') });
+    }
     DOC.chapters.forEach(function (c) {
       if (c.key === '__topics__') return;
       c.blocks.forEach(function (b) {
@@ -435,6 +471,12 @@
             var a = ((b.aids || [])[ri] || [])[ci];
             if (a) push(c, cell, (row[ci + 1] || row[ci - 1] || ''), a);
           });
+        });
+        // prose sentences and the resource library were rendered but not searchable:
+        // ~4000 French lines and 168 links that could only be found by scrolling
+        (b.voice || []).forEach(function (v) { push(c, v.fr, '', v.aid); });
+        (b.links || []).forEach(function (x) {
+          pushLink(c, x);
         });
       });
     });
@@ -449,6 +491,16 @@
     var h = ['<div class="chead" style="background:linear-gradient(120deg,#334155,#334155bb)">' +
       '<div class="cno">搜索结果 · RECHERCHE</div><h1>「' + esc(q) + '」共 ' + hits.length + ' 条</h1></div>'];
     HITS.forEach(function (x) {
+      if (x.url) {                       // a resource: open it, there is nothing to play
+        h.push('<a class="lcard" href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' +
+          '<div class="lh"><span class="lt">' + esc(x.fr) + '</span>' +
+          (x.level ? '<span class="lv lv-' + esc(x.level) + '">' + esc(x.level) + '</span>' : '') + '</div>' +
+          (x.meta ? '<div class="lmeta">' + esc(x.meta) + '</div>' : '') +
+          (x.zh ? '<div class="lwhy">' + rich(x.zh) + '</div>' : '') +
+          '<div class="lfoot"><span class="lcn unsure">📍 ' + esc(x.ch.zh) + '</span>' +
+          '<span class="lgo">打开 ↗</span></div></a>');
+        return;
+      }
       h.push('<div class="b-card" style="border-left-color:' + (x.ch.color || '#334155') + '">' +
         '<div class="cf">' + spk(x.aid, x.fr) + '<span class="frtext" data-play="' + (x.aid || '') + '">' + rich(x.fr) + '</span></div>' +
         (x.zh ? '<div class="cz">' + rich(x.zh) + '</div>' : '') +
@@ -497,6 +549,8 @@
       startQueue(list, 0);
       return;
     }
+    var go = t.closest('[data-go]');
+    if (go) { renderChapter(+go.dataset.go); return; }
     var fb = t.closest('.lfb');
     if (fb) {
       ev.preventDefault();
@@ -543,13 +597,18 @@
 
   /* ---------------- vocab book ---------------- */
   /* 「＋ 加入生词本」 used to have nowhere to lead once the trainer page was gone. */
+  var VOCAB = [];
   function vbRender(items) {
+    VOCAB = items || [];
     $('vbN').textContent = items.length ? items.length + ' 个词' : '';
     if (!items.length) {
       $('vbList').innerHTML = '<div class="vbe">还是空的。<br>看书时点任意法语单词，弹出的卡片右下角有「＋ 加入生词本」。</div>';
       return;
     }
-    $('vbList').innerHTML = items.slice().reverse().map(function (x) {
+    $('vbList').innerHTML =
+      '<div class="vbact"><button class="btn pri" id="vbDrill">🎴 背这 ' + items.length + ' 个词</button>' +
+      '<button class="btn" id="vbShuffle">🔀 打乱顺序背</button></div>' +
+      items.slice().reverse().map(function (x) {
       return '<div class="vbi"><button class="btn vbs" data-w="' + esc(x.word) + '">🔊</button>' +
         '<div class="vbt"><div class="vbw">' + esc(x.word) +
         (x.lemma && x.lemma.toLowerCase() !== x.word.toLowerCase() ? ' <span class="vbl2">← ' + esc(x.lemma) + '</span>' : '') +
@@ -646,6 +705,13 @@
   }
   $('vbClose').onclick = function () { $('vbwrap').classList.add('hidden'); };
   $('vbList').addEventListener('click', function (e) {
+    if (e.target.closest('#vbDrill')) { fcFromVocab(VOCAB.slice().reverse()); return; }
+    if (e.target.closest('#vbShuffle')) {
+      var a = VOCAB.slice();
+      for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+      fcFromVocab(a);
+      return;
+    }
     var s = e.target.closest('.vbs');
     if (s) { if (window.tcfLookup) window.tcfLookup.play(s.dataset.w); return; }
     var d = e.target.closest('.vbd');
@@ -664,7 +730,12 @@
   $('fcKnow').onclick = function () { fcNext(true); };
   $('fcAgain').onclick = function () { fcNext(false); };
   $('fcBack').onclick = fcBack;
-  $('fcSpeak').onclick = function () { var it = FC.list[FC.i]; if (it && it.aid) play(it.aid, it.fr); };
+  $('fcSpeak').onclick = function () {
+    var it = FC.list[FC.i];
+    if (!it) return;
+    if (it.aid) play(it.aid, it.fr);
+    else if (window.tcfLookup) window.tcfLookup.play(it.fr);   // saved words live in the word pack
+  };
   $('pPlay').onclick = function () {
     if (au.paused) { if (au.src) { au.play(); this.textContent = '⏸'; } else startQueue(currentClips(), 0); }
     else { au.pause(); this.textContent = '▶'; }

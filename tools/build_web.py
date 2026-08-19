@@ -192,12 +192,19 @@ html = html.replace('</body>', SW_REG + '</body>')
 assert 'static/webshim.js' in html and 'href="static/app.css"' in html and 'sw.js' in html
 write(os.path.join(WEB, "index.html"), html)
 
-# hash every shell file: keying on app.js alone left returning visitors on a
-# stale lookup.js / app.css after a deploy that only touched those
+# The service worker serves data/ cache-first, so the cache key has to move whenever
+# the *content* moves too. Keying on the shell alone meant a chapters-only deploy was
+# invisible to anyone who had already opened the site — the worst kind of silent bug.
 h = hashlib.md5()
 for f in ("index.html", "static/app.js", "static/app.css", "static/lookup.js",
           "static/lookup.css", "static/webshim.js", "static/mp3ids.js", "static/stats.js"):
     h.update(read(os.path.join(WEB, f)).encode("utf-8"))
+for f in ("data/content.json", "data/word_index.json", "data/conj_index.json", "data/dict.json"):
+    p = os.path.join(WEB, f)
+    if os.path.exists(p):
+        with open(p, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
 ver = h.hexdigest()[:8]
 write(os.path.join(WEB, "sw.js"), SW.replace("__VER__", ver))
 print("sw.js version", ver)

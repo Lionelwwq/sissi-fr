@@ -493,3 +493,23 @@ body.dark .lgo{color:var(--accent)}
 #moreMenu .btn{width:100%;justify-content:flex-start;text-align:left;min-height:44px;
                border:0;background:transparent;font-size:14.5px;padding:10px 12px}
 @media (hover:hover){#moreMenu .btn:hover{background:var(--accent-soft)}}
+
+/* ---------- chapter pager ---------- */
+.chnav{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:34px 0 8px}
+.chn{text-align:left;border:1px solid var(--line);background:var(--card);border-radius:var(--r-sm);
+     padding:13px 15px;cursor:pointer;font-family:inherit;color:var(--ink);
+     box-shadow:var(--shadow);transition:border-color .14s,box-shadow .14s,transform .14s}
+.chn.nx{text-align:right}
+.chn span{display:block;font-size:12px;color:var(--accent);font-weight:600;margin-bottom:4px}
+.chn b{display:block;font-size:14px;font-weight:600;line-height:1.5}
+@media (hover:hover){.chn:hover{border-color:var(--accent);box-shadow:var(--shadow-lg);transform:translateY(-1px)}}
+.chn:active{transform:scale(.99)}
+
+/* ---------- vocab drill ---------- */
+.vbact{display:flex;gap:9px;padding:10px 5px 4px;flex-wrap:wrap}
+.vbact .btn{min-height:42px}
+@media (max-width:860px){
+  .chnav{grid-template-columns:1fr}
+  .chn,.chn.nx{text-align:left}
+  .vbact .btn{flex:1 1 auto;min-height:46px}
+}
