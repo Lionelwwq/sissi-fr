@@ -322,3 +322,10 @@ body.dark #nosound{background:#3a2f18}
 .navitem.seen .t{color:var(--muted)}
 .only-phone{display:none}
 @media (max-width:860px){ .only-phone{display:inline-flex} }
+
+/* on touch, a long press means "play this sentence"; the native selection
+   magnifier would fight it, and drag-select never worked with fingers anyway */
+@media (hover:none){
+  .frtext,.mline,.b-card .cf,.dtx,.pcard .ph,.pcard .ex,table.b-tab td{
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+}

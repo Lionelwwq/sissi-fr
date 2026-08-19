@@ -216,7 +216,50 @@
   var ZONES = '#wrap, .fc, .wpop, .promptbox, .cbox, .b-model, .reccard';
   var DEAD = 'button, a, input, textarea, select, .spk, .wp-head, .wp-foot';
 
+  /* Tapping a word looks it up and stops there, so whole-sentence playback was
+     reachable only through the small 🔊. A long press now plays the sentence —
+     the gesture the 4px gaps between words used to be doing by accident. */
+  var LP = { timer: null, x: 0, y: 0, fired: false };
+  function sentenceUnder(el) {
+    var n = el && el.closest ? el.closest('[data-play],[data-aid]') : null;
+    return n ? (n.getAttribute('data-play') || n.getAttribute('data-aid')) : null;
+  }
+  function lpStart(e) {
+    var pt = e.touches ? e.touches[0] : e;
+    var host = e.target.closest && e.target.closest(ZONES);
+    if (!host || (e.target.closest && e.target.closest(DEAD))) return;
+    var aid = sentenceUnder(e.target);
+    if (!aid) return;
+    LP.fired = false; LP.x = pt.clientX; LP.y = pt.clientY;
+    clearTimeout(LP.timer);
+    LP.timer = setTimeout(function () {
+      LP.fired = true;
+      close();
+      au.pause();
+      au.src = '/audio/' + aid;
+      au.playbackRate = rate();
+      au.play().catch(function () {});
+      flash('▶ 播放整句');
+      if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
+    }, 480);
+  }
+  function lpMove(e) {
+    var pt = e.touches ? e.touches[0] : e;
+    if (!LP.timer) return;
+    if (Math.abs(pt.clientX - LP.x) > 12 || Math.abs(pt.clientY - LP.y) > 12) {
+      clearTimeout(LP.timer); LP.timer = null;
+    }
+  }
+  function lpEnd() { clearTimeout(LP.timer); LP.timer = null; }
+  document.addEventListener('touchstart', lpStart, { passive: true });
+  document.addEventListener('touchmove', lpMove, { passive: true });
+  document.addEventListener('touchend', lpEnd, true);
+  document.addEventListener('mousedown', lpStart, true);
+  document.addEventListener('mousemove', lpMove, true);
+  document.addEventListener('mouseup', lpEnd, true);
+
   document.addEventListener('click', function (e) {
+    if (LP.fired) { LP.fired = false; e.preventDefault(); e.stopPropagation(); return; }
     var host = e.target.closest(ZONES);
     if (!host) return;
     if (e.target.closest(DEAD)) return;
