@@ -205,23 +205,32 @@ body.dark .b-warn{background:#3a1f1c}
   .topbar .btn{min-height:42px;padding:9px 12px;font-size:14px}
   /* playback controls move down to the player bar, within thumb reach */
   .topbar #segSpeed,.topbar #btnRepeat{display:none}
-  #player{padding:8px 12px calc(8px + env(safe-area-inset-bottom));gap:7px}
-  #player .btn{min-width:46px;min-height:44px;font-size:16px}
+  #player{padding:8px 10px calc(8px + env(safe-area-inset-bottom));gap:5px;
+          overflow-x:auto;scrollbar-width:none}
+  #player::-webkit-scrollbar{display:none}
+  #player .btn{min-width:44px;min-height:44px;font-size:16px;padding:0 8px;flex:0 0 auto}
   #player .now{display:none}
   #player #segSpeed{margin-left:auto}
-  #player #segSpeed button{padding:11px 10px;font-size:13px}
-  #player #btnRepeat{min-width:46px}
+  #player #segSpeed{flex:0 0 auto}
+  #player #segSpeed button{padding:11px 7px;font-size:12.5px}
+  #player #btnRepeat{min-width:44px;flex:0 0 auto}
   .navitem{padding:12px 18px}
   .searchbox{padding:12px 14px}
   /* below 16px iOS Safari zooms the page in on focus and never zooms back */
   .searchbox input{font-size:16px;padding:11px 12px}
   /* .spk sits at opacity .45 and only brightens on :hover — which never happens on touch */
-  .spk{min-width:40px;min-height:36px;font-size:16px;vertical-align:middle;opacity:.9}
+  .spk{min-width:44px;min-height:40px;font-size:17px;vertical-align:middle;opacity:.9;
+       padding:4px 8px}
+  .spk:active{background:var(--accent-soft);opacity:1}
   #side{padding-top:env(safe-area-inset-top)}
   /* tap anywhere outside the drawer to close it */
   #scrim{position:fixed;inset:0;background:rgba(10,16,26,.4);z-index:140;display:none}
   #side.open ~ #scrim,body.drawer #scrim{display:block}
   .b-para,.b-tip,.b-warn,.b-ul li,.b-steps li{font-size:15.5px}
+  .b-card .cz,.pcard .zh,.dzh{font-size:15px}
+  .b-card .cn,.pcard .note,.pcard .exzh,.mzh{font-size:13.5px}
+  .wp-zh{font-size:16px}
+  .wp-c .cz,.wp-note,.wp-ex,.wp-cj{font-size:13.5px}
   table.b-tab th,table.b-tab td{padding:10px 11px}
   /* a wide table must announce that it scrolls */
   .tabwrap{position:relative}
@@ -245,3 +254,32 @@ body.dark .b-warn{background:#3a1f1c}
          line-height:1.7;background:#fdf4e6;border-left:3px solid #e8a33d;color:var(--ink)}
 body.nosound #nosound{display:block}
 body.dark #nosound{background:#3a2f18}
+
+/* ---------- phone: modals ---------- */
+@media (max-width:860px){
+  /* 「看答案」 sat 10px above 「会了」, and a mis-tap could not be undone */
+  .fc .acts{gap:10px;flex-wrap:wrap}
+  .fc .acts .btn{min-height:46px;padding:0 14px}
+  #fcReveal{width:100%;margin-bottom:6px}
+  #fcKnow,#fcAgain{flex:1 1 40%}
+  .fc .fr{font-size:21px}
+  .fc .zh{font-size:16px}
+  /* the vocab list was never covered by the phone block at all */
+  .vbi{padding:13px 5px}
+  .vbs{min-width:46px;min-height:44px;font-size:17px}
+  .vbd{min-height:44px;padding:0 14px;font-size:13px}
+  .vbw{font-size:17px}
+  .vbg{font-size:14.5px}
+  .vb{max-height:88vh}
+  .vbh{padding:14px 16px}
+}
+
+/* ---------- phone: the player row has to fit 360px without scrolling ----------
+   Measured at 360px: the row wanted 418px and 🔁 复读 fell off the end. ⏹ is the
+   one control that is genuinely redundant — ▶ already toggles pause. */
+@media (max-width:430px){
+  #player{gap:4px;padding-left:8px;padding-right:8px}
+  #player #pStop{display:none}
+  #player .btn{min-width:42px;padding:0 6px}
+  #player #segSpeed button{padding:11px 5px;font-size:12px}
+}

@@ -8,7 +8,35 @@
 
   var DICT = null, WORDS = null, CONJ = null, loading = null;
   var au = new Audio();
+  au.preload = 'auto';
   var pop = null;
+
+  /* iOS only "unlocks" an audio element if its first play() runs inside the
+     synchronous part of a real gesture. Word lookup plays *after* awaiting the
+     dictionary fetch, so the gesture has long expired and the element can stay
+     locked forever — the card appears and nothing is ever heard. Unlock it up
+     front with a silent clip, on the very first touch anywhere. */
+  var SILENT = 'data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/zMsQTAAAAAAAAAAAAAAAA//8AAAAAAAAAAAAAAAAAAAAA';
+  var unlocked = false;
+  function unlock() {
+    if (unlocked) return;
+    unlocked = true;
+    try {
+      var keep = au.src;
+      au.src = SILENT;
+      var r = au.play();
+      if (r && r.then) r.then(function () { au.pause(); au.currentTime = 0; if (keep) au.src = keep; })
+                        .catch(function () {});
+    } catch (e) {}
+  }
+  document.addEventListener('touchend', unlock, true);
+  document.addEventListener('mousedown', unlock, true);
+
+  // the speed she picked applies to sentences; words used to ignore it
+  function rate() {
+    try { var v = JSON.parse(localStorage.getItem('tcf_rate')); return v > 0 ? v : 1; }
+    catch (e) { return 1; }
+  }
 
   // clitics are written joined but looked up separately: l'école -> école
   var ELIDE = /^(l|d|j|n|s|c|m|t|qu)['’](.+)$/i;
@@ -46,7 +74,7 @@
     if (!id) { flash('这个词没有单独录音'); return; }
     au.pause();
     au.src = window.CLIP(id);
-    au.playbackRate = 1;
+    au.playbackRate = rate();
     // a silent catch here meant tapping a hundred words gave no sound and no reason
     au.play().catch(function (e) {
       if (e && e.name === 'AbortError') return;
@@ -62,6 +90,7 @@
     (function step() {
       if (i >= ids.length) return;
       au.src = window.CLIP(ids[i++]);
+      au.playbackRate = rate();
       au.onended = function () { setTimeout(step, 160); };
       au.onerror = function () { setTimeout(step, 160); };   // one bad clip must not stall the rest
       au.play().catch(function (e) { if (!e || e.name !== 'AbortError') setTimeout(step, 160); });
@@ -225,6 +254,9 @@
     });
     e.preventDefault(); e.stopPropagation();
   }, true);
+
+  // pre-warm: otherwise her first tap waits on ~1.5 MB of dictionary
+  setTimeout(function () { load().catch(function () {}); }, 1500);
 
   window.tcfLookup = { lookup: lookup, play: playWord };
 })();

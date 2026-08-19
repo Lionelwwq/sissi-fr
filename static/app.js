@@ -11,6 +11,24 @@
     catch (e) { return true; }
   })();
   var TOUCH = matchMedia('(hover:none)').matches;
+  /* same iOS unlock story as lookup.js: the flashcard view auto-plays after an
+     async render, which is outside the gesture */
+  (function () {
+    var done = false;
+    function unlock() {
+      if (done) return;
+      done = true;
+      try {
+        au.muted = true;
+        var r = au.play();
+        if (r && r.then) r.then(function () { au.pause(); au.currentTime = 0; au.muted = false; })
+                          .catch(function () { au.muted = false; });
+        else au.muted = false;
+      } catch (e) { au.muted = false; }
+    }
+    document.addEventListener('touchend', unlock, true);
+    document.addEventListener('mousedown', unlock, true);
+  })();
   var $ = function (id) { return document.getElementById(id); };
 
   /* ---------------- utils ---------------- */
@@ -295,7 +313,17 @@
   function fcNext(known) {
     var it = FC.list[FC.i];
     if (!known && it) FC.list.push(it);           // wrong ones come back at the end
+    FC.LAST = { i: FC.i, len: FC.list.length, pushed: !known && !!it };
     FC.i++; fcShow();
+  }
+  /* fat-finger insurance: 「会了」 and 「还不会」 sit next to each other on a phone */
+  function fcBack() {
+    if (!FC.LAST || FC.i !== FC.LAST.i + 1) { toast('只能撤销上一张'); return; }
+    if (FC.LAST.pushed) FC.list.pop();
+    FC.i = FC.LAST.i;
+    FC.LAST = null;
+    fcShow();
+    fcReveal();
   }
   function fcOpen() {
     stopAll();               // a running chapter queue would talk over every card
@@ -441,6 +469,7 @@
   $('fcReveal').onclick = fcReveal;
   $('fcKnow').onclick = function () { fcNext(true); };
   $('fcAgain').onclick = function () { fcNext(false); };
+  $('fcBack').onclick = fcBack;
   $('fcSpeak').onclick = function () { var it = FC.list[FC.i]; if (it && it.aid) play(it.aid, it.fr); };
   $('pPlay').onclick = function () {
     if (au.paused) { if (au.src) { au.play(); this.textContent = '⏸'; } else startQueue(currentClips(), 0); }
@@ -482,6 +511,10 @@
         '<div style="font-size:13px">Bonne chance !</div></div>';
     }, 400);
   };
+  // on a phone the drawer covers the results; Enter gets it out of the way
+  $('q').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { this.blur(); drawer(false); }
+  });
   $('q').addEventListener('input', function () { clearTimeout(qt); var v = this.value; qt = setTimeout(function () { if ($('q').value === v) search(v); }, 220); });
 
   document.addEventListener('keydown', function (e) {
