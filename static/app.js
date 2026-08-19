@@ -213,6 +213,24 @@
               '<div class="dtx"><div>' + spk(d.aid, d.fr) + '<span class="frtext" data-play="' + (d.aid || '') + '">' + rich(d.fr) + '</span></div>' +
               '<div class="dzh">' + rich(d.zh) + '</div></div></div>';
           }).join('') + '</div>');
+      } else if (k === 'links') {
+        if (b.title) h.push('<div class="b-lt">' + esc(b.title) + '</div>');
+        h.push('<div class="lgrid">' + (b.links || []).map(function (x) {
+          // only the domain family is a fact; the rest is a guess and says so
+          var cn = x.cn_ok === 'yes' ? '<span class="lcn ok">国内可看</span>'
+                 : x.cn_ok === 'vpn' ? '<span class="lcn vpn">需要梯子</span>'
+                 : '<span class="lcn unsure">大概率能开 · 点一下试试</span>';
+          return '<a class="lcard" href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' +
+            '<div class="lh"><span class="lt">' + esc(x.title) + '</span>' +
+            '<span class="lv">' + esc(x.level || '') + '</span></div>' +
+            '<div class="lmeta">' + [x.platform, x.kind, x.length, x.accent]
+              .filter(Boolean).map(esc).join(' · ') +
+            (x.free === false ? ' · <b>需订阅</b>' : '') + '</div>' +
+            '<div class="lwhy">' + rich(x.why || '') + '</div>' +
+            (x.how ? '<div class="lhow">▸ ' + rich(x.how) + '</div>' : '') +
+            '<div class="lfoot">' + cn + '<span class="lgo">打开 ↗</span></div>' +
+            '</a>';
+        }).join('') + '</div>');
       } else if (k === 'tip') {
         h.push('<div class="b-tip"><div class="bt">💡 ' + esc(b.title || '提示') + '</div>' + rich(b.text) +
                voiceBar(b, bi) + '</div>');
