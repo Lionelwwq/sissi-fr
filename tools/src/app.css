@@ -478,7 +478,9 @@ body.dark .seg button.on,
 body.dark .lplay,
 body.dark .wp-lv,
 body.dark .lgo,
-body.dark .vsent.playing{color:#0e1420}
+body.dark .vsent.playing,
+body.dark .dpring.full,
+body.dark .dpi.ok .dpck{color:#0e1420}
 body.dark .navitem.on .n{color:rgba(14,20,32,.72)}
 body.dark .b-model .mwc{background:rgba(14,20,32,.18);color:#0e1420}
 body.dark .b-model .mhead .btn{color:#0e1420;border-color:rgba(14,20,32,.25)}

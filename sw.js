@@ -8,7 +8,7 @@
    - the precache bypasses the HTTP cache, or a release published inside GitHub
      Pages' ten-minute max-age window pins the *old* files under the *new* version.
 */
-var V = 'tcf-d675d7fe';
+var V = 'tcf-7eb39225';
 var CLIPS = 'tcf-clip';
 var SHELL = ['./', './index.html', './static/app.css', './static/app.js',
              './static/lookup.css', './static/lookup.js',
