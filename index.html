@@ -15,6 +15,8 @@
     <div class="brand">
       <div class="ttl">TCF 法语学习助手</div>
       <div class="sub">王思专属版 · 加拿大法语真人语音</div>
+      <div class="prog"><div class="pt"><span>学习进度</span><span id="pgTx">—</span></div>
+        <div class="pb"><i id="pgBar" style="width:0%"></i></div></div>
     </div>
     <div class="searchbox"><input id="q" placeholder="搜索法语或中文…（Ctrl+K）" autocomplete="off"></div>
     <nav id="nav"></nav>
@@ -28,6 +30,8 @@
       <button class="btn" id="btnVocab">📒 生词本</button>
       <button class="btn only-phone" id="btnSearch" title="搜索">🔍</button>
       <button class="btn" id="btnStats" title="学习记录">📊</button>
+      <div class="morewrap only-phone"><button class="btn" id="btnMore" title="更多">⋯</button>
+        <div id="moreMenu" class="hidden"></div></div>
       <div class="seg" id="segSpeed">
         <button data-r="0.75">0.75×</button><button data-r="1" class="on">1×</button><button data-r="1.25">1.25×</button>
       </div>

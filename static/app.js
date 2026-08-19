@@ -315,11 +315,16 @@
   }
 
   function markVisited() {
-    var done = store.get('done', {});
+    var done = store.get('done', {}), n = 0;
     document.querySelectorAll('.navitem').forEach(function (e) {
       var c = DOC && DOC.chapters[+e.dataset.i];
-      if (c && done[c.key || +e.dataset.i]) e.classList.add('seen');
+      if (c && done[c.key || +e.dataset.i]) { e.classList.add('seen'); n++; }
     });
+    var total = DOC ? DOC.chapters.length : 0;
+    if (total && $('pgBar')) {
+      $('pgBar').style.width = Math.round(n / total * 100) + '%';
+      $('pgTx').textContent = n + ' / ' + total + ' 章';
+    }
   }
 
   /* ---------------- collect audio of current view ---------------- */
@@ -626,6 +631,10 @@
   $('btnVocab').onclick = vbOpen;
   /* on a phone the search box lives inside the drawer, so it took two steps to find */
   $('btnSearch').onclick = function () { drawer(true); setTimeout(function () { $('q').focus(); }, 60); };
+  $('btnMore').onclick = function (e) { e.stopPropagation(); $('moreMenu').classList.toggle('hidden'); };
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.morewrap')) $('moreMenu').classList.add('hidden');
+  });
 
   /* first run: she opens the app with no idea that anything is tappable */
   if (!store.get('seen', false)) {
@@ -730,6 +739,27 @@
         host.insertBefore(rep, anchor);
       }
     }
+    /* the toolbar wanted 476px on a 360px screen, pushing 📊 and 🌙 off the edge;
+       the secondary actions move into a ⋯ menu instead of being unreachable */
+    var menu = $('moreMenu'), bar = document.querySelector('.topbar');
+    var secondary = [$('btnVocab'), $('btnStats'), $('btnDark')];
+    var LABEL = { btnStats: '📊 学习记录', btnDark: '🌙 夜间模式', btnVocab: '📒 生词本' };
+    if (narrow) {
+      secondary.forEach(function (b) {
+        if (!b || b.parentNode === menu) return;
+        // a bare 📊 in a dropdown means nothing; spell it out once it leaves the toolbar
+        if (!b.dataset.icon) b.dataset.icon = b.textContent.trim();
+        b.textContent = LABEL[b.id] || b.dataset.icon;
+        menu.appendChild(b);
+      });
+    } else if (secondary[0] && secondary[0].parentNode === menu) {
+      secondary.forEach(function (b) { if (b && b.dataset.icon) b.textContent = b.dataset.icon; });
+      var sp = document.querySelector('.topbar .spacer');
+      bar.insertBefore(secondary[0], sp);
+      bar.insertBefore(secondary[1], sp);
+      bar.appendChild(secondary[2]);
+    }
+    if (!narrow) menu.classList.add('hidden');
   }
   placeControls();
   var rz;
