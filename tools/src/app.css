@@ -551,6 +551,13 @@ body.dark .lv.lv-B2{background:#8a3f07;color:#fff}
 .btn.today .dot{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;
   background:var(--accent2);display:block}
 .btn.today .dot.hidden{display:none}
+/* On a phone 📓 moves into the ⋯ menu, and placeControls relabels it by writing
+   textContent — which deletes any child element. Draw this badge with ::after so
+   it cannot be wiped by a relabel. */
+.btn.dotted{position:relative}
+.btn.dotted::after{content:'';position:absolute;top:5px;right:5px;width:8px;height:8px;
+  border-radius:50%;background:#e11d48}
+#moreMenu .btn.dotted::after{top:50%;right:12px;margin-top:-4px}
 #dpwrap{position:fixed;inset:0;background:rgba(10,16,26,.86);z-index:215;display:flex;
   align-items:center;justify-content:center;padding:16px}
 #dpwrap.hidden{display:none}

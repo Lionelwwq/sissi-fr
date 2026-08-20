@@ -17,7 +17,7 @@
    - the HTML comes out of the same bucket as the scripts, or a release serves new
      markup to old code for as long as the new worker takes to install.
 */
-var V = 'tcf-28bbbf13';
+var V = 'tcf-bf71adff';
 var CLIPS = 'tcf-clip';
 var SHELL = ['./', './index.html', './static/app.css', './static/app.js',
              './static/lookup.css', './static/lookup.js',

@@ -989,8 +989,9 @@
   if (!Array.isArray(NOTES)) NOTES = [];
   function notesSave() { store.set('notes', NOTES.slice(-500)); }
   function notesDot() {
-    var d = $('notesDot');
-    if (d) d.classList.toggle('hidden', !NOTES.length);
+    // a class on the button, not a child node: the ⋯ menu relabels it with textContent
+    var b = $('btnNotes');
+    if (b) b.classList.toggle('dotted', !!NOTES.length);
   }
 
   // what she selected, plus where it came from
