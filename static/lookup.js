@@ -36,8 +36,12 @@
       var keep = au.src;
       au.src = SILENT;
       var r = au.play();
-      if (r && r.then) r.then(function () { au.pause(); au.currentTime = 0; if (keep) au.src = keep; })
-                        .catch(function () {});
+      if (r && r.then) r.then(function () {
+        // if a real clip has taken the element over in the meantime, leave it alone —
+        // this used to be able to silence the very first tap it exists to enable
+        if (au.src !== SILENT) return;
+        au.pause(); au.currentTime = 0; if (keep) au.src = keep;
+      }).catch(function () {});
     } catch (e) {}
   }
   document.addEventListener('touchstart', unlock, true);   // a long press plays before touchend ever fires
@@ -202,7 +206,12 @@
         body: JSON.stringify({ word: word, lemma: entry ? entry.l : word,
                                gloss: entry ? entry.zh.join('；') : '',
                                sentence: entry ? entry.ex : '' })
-      }).then(function () { flash('已加入生词本'); close(); }).catch(function () {});
+      }).then(function (r) { return r && r.json ? r.json().catch(function () { return {}; }) : {}; })
+        .then(function (d) {
+          // storage full on an iPhone is silent otherwise: she is told it saved and it did not
+          if (d && d.ok === false) { flash('存不下了，手机存储空间可能满了'); return; }
+          flash('已加入生词本'); close();
+        }).catch(function () { flash('没能加入生词本'); });
     };
   }
 
@@ -242,7 +251,7 @@
   }
   function lpStart(e) {
     var pt = e.touches ? e.touches[0] : e;
-    LP.at = 0;                       // every new gesture starts clean
+    if (e.type === 'touchstart') LP.at = 0;   // a real new finger-down, not iOS's synthetic mousedown
     var host = e.target.closest && e.target.closest(ZONES);
     if (!host || (e.target.closest && e.target.closest(DEAD))) return;
     var aid = sentenceUnder(e.target);
@@ -255,8 +264,12 @@
       takeAudio();
       au.src = window.CLIP(aid);
       au.playbackRate = rate();
-      au.play().catch(function () {});
-      flash('▶ 播放整句');
+      au.play().then(function () { flash('▶ 播放整句'); }, function (e) {
+        // offline on a chapter she has not downloaded, this said 「播放整句」 and was
+        // silent — indistinguishable from the app being broken
+        if (e && e.name === 'AbortError') return;
+        flash('这一句还没下载，连上网再试');
+      });
       if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
     }, 480);
   }
@@ -271,6 +284,9 @@
   document.addEventListener('touchstart', lpStart, { passive: true });
   document.addEventListener('touchmove', lpMove, { passive: true });
   document.addEventListener('touchend', lpEnd, true);
+  // scroll taking over, or a call arriving, cancels the touch — without this the
+  // sentence starts reading itself 480 ms later with nobody touching the screen
+  document.addEventListener('touchcancel', lpEnd, true);
   document.addEventListener('mousedown', lpStart, true);
   document.addEventListener('mousemove', lpMove, true);
   document.addEventListener('mouseup', lpEnd, true);
@@ -310,7 +326,14 @@
     if (!w || w.length < 2) return;
     // load first: without the dictionary we cannot tell a French word from a stray letter
     load().then(function () {
-      if (!DICT[keyOf(w)] && !(CONJ && CONJ[keyOf(w)]) && !(WORDS && WORDS[keyOf(w)])) return;
+      var k = keyOf(w);
+      var known = DICT[k] || (CONJ && CONJ[k]) || (WORDS && WORDS[k]);
+      /* 146 words in the book match none of the three indexes — mostly elisions whose
+         remainder is one letter (m'a -> a, j'y -> y), but also real words the 3000-entry
+         dictionary does not carry. Returning silently made a deliberate tap look broken.
+         The card already has a sentence for exactly this case; let her reach it, as long
+         as what she tapped actually looks like a French word rather than an acronym. */
+      if (!known && !(w.length >= 4 && /[aeiouyàâéèêëîïôûùü]/.test(w))) return;
       lookup(w, e.clientX, e.clientY);
     }).catch(dictFail);
     e.preventDefault(); e.stopPropagation();
@@ -319,7 +342,9 @@
   // pre-warm: otherwise her first tap waits on ~1.5 MB of dictionary
   setTimeout(function () { load().catch(function () {}); }, 1500);
 
-  window.tcfLookup = { lookup: lookup, play: playWord, stop: function () {
+  window.tcfLookup = { lookup: lookup, play: playWord,
+    busy: function () { return !!au.src && !au.paused && !au.ended; },
+    stop: function () {
     SEQ++; au.onended = null; au.onerror = null;
     try { au.pause(); au.currentTime = 0; } catch (e) {}
   } };

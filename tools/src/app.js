@@ -30,21 +30,42 @@
 
   /* ---------------- utils ---------------- */
   function esc(s) {
-    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
+  /* Whatever is not on this list is shown to her as literal angle brackets. That has
+     bitten twice now: the punctuation lesson in 第 12 章 printed <code>:</code> at her
+     instead of a colon, and the wrong-form examples lost the strike-through that was
+     the entire point of writing them. Add a tag here before using it in the data. */
+  var RICH_TAGS = ['b', 'i', 'u', 's', 'code', 'sup', 'sub'];
   function rich(s) {
     var t = esc(s);
-    ['b', 'i', 'u'].forEach(function (g) {
+    RICH_TAGS.forEach(function (g) {
       t = t.split('&lt;' + g + '&gt;').join('<' + g + '>').split('&lt;/' + g + '&gt;').join('</' + g + '>');
     });
     return t.split('&lt;br&gt;').join('<br>').split('\n').join('<br>');
+  }
+  // a flashcard front is plain text, so markup that survives into it is visible
+  function plain(s) {
+    return String(s == null ? '' : s).replace(/<[^>]+>/g, '');
+  }
+  /* She types on a phone keyboard, where é and ç cost a long press. Searching for
+     「etudiant」 used to find 0 of the 68 étudiant in the book. Fold accents and both
+     apostrophes away on each side and the two spellings become the same word. */
+  function fold(s) {
+    s = String(s == null ? '' : s).toLowerCase().replace(/[\u2018\u2019\u02bc]/g, "'");
+    if (s.normalize) { try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {} }
+    return s;
   }
   function toast(m) {
     var t = $('toast'); t.textContent = m; t.classList.add('on');
     clearTimeout(t._t); t._t = setTimeout(function () { t.classList.remove('on'); }, 1800);
   }
   var store = {
-    get: function (k, d) { try { return JSON.parse(localStorage.getItem('tcf_' + k)) ?? d; } catch (e) { return d; } },
+    get: function (k, d) {
+      try { var v = JSON.parse(localStorage.getItem('tcf_' + k)); return v === null || v === undefined ? d : v; }
+      catch (e) { return d; }
+    },
     set: function (k, v) { try { localStorage.setItem('tcf_' + k, JSON.stringify(v)); } catch (e) {} }
   };
 
@@ -110,7 +131,11 @@
     au.src = '/audio/' + aid;
     au.playbackRate = RATE;
     var mine = ++PLAY_SEQ;
-    au.play().catch(function (e) {
+    au.play().then(function () {
+      // count it only once it actually made a sound
+      missRun = 0;
+      if (mine === PLAY_SEQ && window.tcfStats) window.tcfStats.audio(label);
+    }, function (e) {
       // swapping src aborts the previous play(): that is normal, not a broken audio pack
       if (e && (e.name === 'AbortError' || mine !== PLAY_SEQ)) return;
       fetch('/api/ping').then(function () {
@@ -118,13 +143,24 @@
       }).catch(function () { serverGone(); });
     });
     highlight(aid, srcEl);
-    if (window.tcfStats) window.tcfStats.audio(label);
     $('pNow').textContent = label || '正在播放…';
     $('pPlay').textContent = '⏸';
   }
+  var missRun = 0;
   au.addEventListener('error', function () {
-    if (QI >= 0 && QI < QUEUE.length - 1) { QI++; playQueueItem(); return; }
+    /* Offline on a chapter she has not downloaded, every clip 404s instantly and
+       the queue used to walk all ~200-400 of them in one synchronous burst. Stop
+       after a few and say why — the status text is display:none on phones. */
+    if (++missRun >= 4) {
+      missRun = 0; dropQueue(); ARMED = false; clearHL();
+      $('pPlay').textContent = '▶';
+      $('pNow').textContent = '这一章的发音还没下载';
+      toast('这一章的发音还没下载，连上网再点一次');
+      return;
+    }
+    if (QI >= 0 && QI < QUEUE.length - 1) { QI++; setTimeout(playQueueItem, 120); return; }
     clearHL(); QI = -1;
+    ARMED = false;          // otherwise ▶ keeps retrying the clip that just failed
     $('pPlay').textContent = '▶';
     $('pNow').textContent = '播放失败';
   });
@@ -300,7 +336,12 @@
     return h.join('');
   }
 
-  function renderChapter(i) {
+  var markTimer = null;
+  function markRead(c, i) {
+    var done = store.get('done', {});
+    if (!done[c.key || i]) { done[c.key || i] = 1; store.set('done', done); markVisited(); }
+  }
+  function renderChapter(i, restoring) {
     stopAll();               // otherwise the previous chapter keeps reading itself aloud
     CUR = i;
     VIEW = 'chapter';
@@ -328,8 +369,13 @@
     document.querySelectorAll('.navitem').forEach(function (e) { e.classList.toggle('on', +e.dataset.i === i); });
     store.set('last', i);
     if (window.tcfStats) window.tcfStats.view(c);
-    var done = store.get('done', {});
-    if (!done[c.key || i]) { done[c.key || i] = 1; store.set('done', done); }
+    /* Restoring where she left off is not the same as reading it. Marking the
+       restored chapter read made a fresh install claim 1 / 56 before she had seen
+       the welcome screen, and pushed the plan's 新课 slot to 第 2 章 on day one.
+       Deliberate navigation counts immediately; a restore has to earn it. */
+    clearTimeout(markTimer);
+    if (restoring) markTimer = setTimeout(function () { markRead(c, i); }, 45000);
+    else markRead(c, i);
     markVisited();
   }
 
@@ -363,7 +409,7 @@
   var FC = { list: [], i: 0, shown: false };
   function fcBuild() {
     if (VIEW === 'search') {          //背诵搜索结果，而不是上一次浏览的章节
-      return HITS.filter(function (h) { return h.aid; })
+      return HITS.filter(function (h) { return h.aid && h.zh; })
                  .map(function (h) { return { fr: h.fr, zh: h.zh, aid: h.aid }; });
     }
     var c = DOC.chapters[CUR], list = [];
@@ -403,7 +449,7 @@
     FC.shown = false;
     $('fcProg').textContent = '第 ' + (FC.i + 1) + ' / ' + FC.list.length + ' 张　·　' +
       (TOUCH ? '点「看答案」，再选会了 / 还不会' : '空格看答案，← 还不会，→ 会了');
-    $('fcFr').textContent = it.fr;
+    $('fcFr').textContent = plain(it.fr);   // some table cells carry <b>, and this is plain text
     $('fcZh').textContent = '';
     $('fcEx').classList.add('hidden');
     if (it.aid) play(it.aid, it.fr.slice(0, 60));
@@ -437,7 +483,7 @@
   function fcOpen() {
     stopAll();               // a running chapter queue would talk over every card
     FC.list = fcBuild(); FC.i = 0;
-    if (!FC.list.length) { toast(VIEW === 'search' ? '搜索结果里没有可背诵的词卡' : '本章没有可背诵的词卡'); return; }
+    if (!FC.list.length) { toast(VIEW === 'search' ? '这些结果里没有带中文的句子，背不了' : '本章没有可背诵的词卡'); return; }
     $('fcwrap').classList.remove('hidden');
     if (window.tcfStats) window.tcfStats.flash(FC.list.length);
     fcShow();
@@ -445,15 +491,22 @@
   function fcClose() { $('fcwrap').classList.add('hidden'); stopAll(); }
 
   /* ---------------- search ---------------- */
+  var SCROLL0 = 0;
   function search(q) {
-    q = q.trim().toLowerCase();
-    if (q.length < 2) { if (VIEW === 'search') renderChapter(CUR); return; }
+    q = fold(q.trim());
+    if (q.length < 2) {
+      // coming back from a search used to dump her at the top of a chapter that can
+      // be eighty screens long
+      if (VIEW === 'search') { var back = SCROLL0; renderChapter(CUR); $('main').scrollTop = back; }
+      return;
+    }
+    if (VIEW !== 'search') SCROLL0 = $('main').scrollTop;
     stopAll();
     VIEW = 'search';
     var hits = [], seen = {};
     function push(ch, fr, zh, aid) {
       if (!fr) return;
-      if ((fr + ' ' + (zh || '')).toLowerCase().indexOf(q) < 0) return;
+      if (fold(fr + ' ' + (zh || '')).indexOf(q) < 0) return;
       var k = (aid || '') + '|' + fr;
       if (seen[k]) return;
       seen[k] = 1;
@@ -461,7 +514,7 @@
     }
     // a resource matches on its title, platform and blurb, and links out instead of playing
     function pushLink(ch, x) {
-      var hay = [x.title, x.platform, x.kind, x.why, x.how, x.accent, x.level].join(' ').toLowerCase();
+      var hay = fold([x.title, x.platform, x.kind, x.why, x.how, x.accent, x.level].join(' '));
       if (hay.indexOf(q) < 0) return;
       var k = 'L|' + x.url;
       if (seen[k]) return;
@@ -687,25 +740,42 @@
   }
 
   function cut(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
-  function planBuild(vocab) {
+  function daysBetween(ts) {          // calendar days, not elapsed hours: 22:00 → 08:00 is yesterday
+    if (!ts) return null;
+    var a = new Date(ts), b = new Date();
+    a.setHours(0, 0, 0, 0); b.setHours(0, 0, 0, 0);
+    return Math.round((b - a) / 864e5);
+  }
+  function chapterHasCards(i) {
+    var c = DOC.chapters[i];
+    if (!c) return false;
+    if (c.key === '__topics__') return !!(DOC.topics && DOC.topics.length);
+    return (c.blocks || []).some(function (b) { return b.kind === 'cards' && (b.cards || []).length; });
+  }
+  function nearestCardChapter(from) {   // 「背这一章的词卡」 must land somewhere that has any
+    if (chapterHasCards(from)) return from;
+    for (var d = 1; d < DOC.chapters.length; d++) {
+      if (chapterHasCards(from + d)) return from + d;
+      if (chapterHasCards(from - d)) return from - d;
+    }
+    return -1;
+  }
+
+  /* The day's list is decided once and kept. It used to be re-derived on every open,
+     so acting on an item removed it, a new task slid into the slot, and the ✓ she
+     ticked afterwards sat on something she had never seen. */
+  function planSpec(vocab) {
     // one generator per slot: otherwise adding a word to the vocabulary book shifts how
     // many numbers the shuffle eats and the speaking topic changes for no reason
     var Rres = seeded(PLAN.day + ':res'), Rvoc = seeded(PLAN.day + ':voc'), Rtalk = seeded(PLAN.day + ':talk');
     var st = window.tcfStats ? window.tcfStats.summary() : { chapters: [], links: [] };
     var done = store.get('done', {});
-    var items = [];
+    var spec = [];
 
     // ① 最久没回头的一章
     var read = st.chapters.filter(function (c) { return c.sec > 45 && chIndexByKey(c.key) >= 0; })
                           .sort(function (a, b) { return (a.last || 0) - (b.last || 0); });
-    if (read.length) {
-      var r = read[0], ri = chIndexByKey(r.key);
-      var ago = r.last ? Math.floor((Date.now() - r.last) / 864e5) : null;
-      items.push({ k: 'review', icon: '🔁', tag: '复习', t: '第 ' + r.no + ' 章 · ' + r.zh,
-        s: (ago === null ? '' : ago <= 0 ? '今天看过，再过一遍' : ago + ' 天没回头了') +
-           '　·　当时读了 ' + window.tcfStats.mins(r.sec),
-        b: '打开这一章', go: function () { planGo(ri); } });
-    }
+    if (read.length) spec.push({ k: 'review', key: read[0].key });
 
     // ② 下一章新课
     var nxt = -1;
@@ -716,11 +786,7 @@
       var least = st.chapters.slice().sort(function (a, b) { return a.sec - b.sec; })[0];
       nxt = least ? chIndexByKey(least.key) : 0;
     }
-    if (nxt >= 0) {
-      var nc = DOC.chapters[nxt], ni = nxt;
-      items.push({ k: 'new', icon: '📖', tag: '新课', t: '第 ' + nc.no + ' 章 · ' + nc.zh,
-        s: cut(String(nc.intro || ''), 62), b: '开始读', go: function () { planGo(ni); } });
-    }
+    if (nxt >= 0) spec.push({ k: 'new', key: DOC.chapters[nxt].key || ('ch' + DOC.chapters[nxt].no) });
 
     // ③ 一条还没点开过的听力材料
     var opened = {};
@@ -730,14 +796,7 @@
     });
     var pref = pool.filter(function (o) { return o.x.level === 'A2' || o.x.level === 'B1'; });
     var cand = pref.length ? pref : pool;
-    if (cand.length) {
-      var pk = cand[Math.floor(Rres() * cand.length)];
-      items.push({ k: 'res', icon: '🎧', tag: '听力', t: pk.x.title,
-        s: [pk.x.platform, pk.x.level, pk.x.length].filter(Boolean).join(' · ') +
-           (pk.x.how ? '　·　' + cut(String(pk.x.how).replace(/<[^>]+>/g, ''), 64) : ''),
-        b: pk.x.embed ? '去看（能站内播）' : '去看这一条',
-        go: function () { planGo(pk.ci, function () { spotlight(pk.x.url); }); } });
-    }
+    if (cand.length) spec.push({ k: 'res', url: cand[Math.floor(Rres() * cand.length)].x.url });
 
     // ④ 生词：够 5 个就背自己存的，否则先背这一章的词卡
     if (vocab && vocab.length >= 5) {
@@ -745,35 +804,91 @@
       for (var j = a.length - 1; j > 0; j--) {
         var k2 = Math.floor(Rvoc() * (j + 1)), tmp = a[j]; a[j] = a[k2]; a[k2] = tmp;
       }
-      var picks = a.slice(0, Math.min(12, a.length));
-      items.push({ k: 'vocab', icon: '🎴', tag: '生词', t: '背 ' + picks.length + ' 个自己存的词',
-        s: picks.slice(0, 6).map(function (x) { return x.word; }).join('、') + (picks.length > 6 ? ' …' : ''),
-        b: '开始背', go: function () { $('dpwrap').classList.add('hidden'); fcFromVocab(picks); } });
+      spec.push({ k: 'vocab', w: a.slice(0, Math.min(12, a.length)).map(function (x) { return x.word; }) });
     } else {
-      var ci = read.length ? chIndexByKey(read[0].key) : (nxt >= 0 ? nxt : 0);
-      items.push({ k: 'vocab', icon: '🎴', tag: '词卡', t: '背这一章的词卡',
-        s: '生词本还不到 5 个词。看书时点任意法语单词，卡片右下角能存进去，攒起来以后就背自己的。',
-        b: '打开背诵', go: function () { planGo(ci, fcOpen); } });
+      var from = read.length ? chIndexByKey(read[0].key) : (nxt >= 0 ? nxt : 0);
+      var ci = nearestCardChapter(from);
+      if (ci >= 0) spec.push({ k: 'vocab', cards: DOC.chapters[ci].key || ('ch' + DOC.chapters[ci].no) });
     }
 
     // ⑤ 开口 90 秒
     var tps = DOC.topics || [];
     if (tps.length) {
-      var tp = tps[Math.floor(Rtalk() * tps.length)], es = tp.entries || [], three = [];
-      while (three.length < 3 && es.length) {
-        var e = es[Math.floor(Rtalk() * es.length)];
-        if (three.indexOf(e) < 0) three.push(e);
+      var ti = Math.floor(Rtalk() * tps.length), es = (tps[ti] || {}).entries || [], pick = [];
+      // guard the count: a topic with fewer than three entries used to spin here forever
+      var want = Math.min(3, es.length), spins = 0;
+      while (pick.length < want && spins++ < 200) {
+        var ei = Math.floor(Rtalk() * es.length);
+        if (pick.indexOf(ei) < 0) pick.push(ei);
       }
-      items.push({ k: 'talk', icon: '🗣', tag: '口语', t: 'Tâche 3 · ' + tp.zh + '，说满 90 秒',
-        s: '录下来再回放。至少用上：' + three.map(function (x) { return x.phrase; }).join(' / '),
-        b: '打开话题库', go: function () { planGo(chIndexByKey('__topics__')); } });
+      spec.push({ k: 'talk', t: ti, e: pick });
     }
+    return spec;
+  }
+
+  /* spec → what she sees. Titles and 「N 天没回头」 are recomputed live so they stay
+     truthful, but which chapter / which clip / which words never move within a day. */
+  function planHydrate(spec, vocab) {
+    var st = window.tcfStats ? window.tcfStats.summary() : { chapters: [], links: [] };
+    var byKey = {};
+    (st.chapters || []).forEach(function (c) { byKey[c.key] = c; });
+    var items = [];
+    (spec || []).forEach(function (sp) {
+      if (sp.k === 'review') {
+        var ri = chIndexByKey(sp.key); if (ri < 0) return;
+        var c = DOC.chapters[ri], r = byKey[sp.key] || {};
+        var ago = daysBetween(r.last);
+        items.push({ k: 'review', icon: '🔁', tag: '复习', t: '第 ' + c.no + ' 章 · ' + c.zh,
+          s: (ago === null ? '' : ago <= 0 ? '今天看过，再过一遍' : ago + ' 天没回头了') +
+             (r.sec ? '　·　当时读了 ' + window.tcfStats.mins(r.sec) : ''),
+          b: '打开这一章', go: function () { planGo(ri); } });
+      } else if (sp.k === 'new') {
+        var ni = chIndexByKey(sp.key); if (ni < 0) return;
+        var nc = DOC.chapters[ni];
+        items.push({ k: 'new', icon: '📖', tag: '新课', t: '第 ' + nc.no + ' 章 · ' + nc.zh,
+          s: cut(String(nc.intro || ''), 62), b: '开始读', go: function () { planGo(ni); } });
+      } else if (sp.k === 'res') {
+        var hit = null;
+        allLinks().forEach(function (o) { if (!hit && o.x.url === sp.url) hit = o; });
+        if (!hit) return;
+        var x = hit.x;
+        items.push({ k: 'res', icon: '🎧', tag: '听力', t: x.title,
+          s: [x.platform, x.level, x.length].filter(Boolean).join(' · ') +
+             (x.how ? '　·　' + cut(String(x.how).replace(/<[^>]+>/g, ''), 64) : ''),
+          b: x.embed ? '去看（能站内播）' : '去看这一条',
+          go: function () { planGo(hit.ci, function () { spotlight(x.url); }); } });
+      } else if (sp.k === 'vocab' && sp.w) {
+        var have = {};
+        (vocab || []).forEach(function (v) { have[v.word] = v; });
+        var picks = sp.w.map(function (w) { return have[w]; }).filter(Boolean);
+        if (!picks.length) return;
+        items.push({ k: 'vocab', icon: '🎴', tag: '生词', t: '背 ' + picks.length + ' 个自己存的词',
+          s: picks.slice(0, 6).map(function (x) { return x.word; }).join('、') + (picks.length > 6 ? ' …' : ''),
+          b: '开始背', go: function () { $('dpwrap').classList.add('hidden'); fcFromVocab(picks); } });
+      } else if (sp.k === 'vocab') {
+        var ci = chIndexByKey(sp.cards); if (ci < 0) return;
+        items.push({ k: 'vocab', icon: '🎴', tag: '词卡', t: '背第 ' + DOC.chapters[ci].no + ' 章的词卡',
+          s: '生词本还不到 5 个词。看书时点任意法语单词，卡片右下角能存进去，攒起来以后就背自己的。',
+          b: '打开背诵', go: function () { planGo(ci, fcOpen); } });
+      } else if (sp.k === 'talk') {
+        var tp = (DOC.topics || [])[sp.t]; if (!tp) return;
+        var es = tp.entries || [];
+        var three = (sp.e || []).map(function (i) { return es[i]; }).filter(Boolean);
+        items.push({ k: 'talk', icon: '🗣', tag: '口语', t: 'Tâche 3 · ' + tp.zh + '，说满 90 秒',
+          s: '录下来再回放。至少用上：' + three.map(function (x) { return x.phrase; }).join(' / '),
+          b: '打开话题库', go: function () { planGo(chIndexByKey('__topics__')); } });
+      }
+    });
     return items;
   }
 
   function planRender() {
+    // bank the minutes she is accumulating right now, or the panel reports the
+    // last save instead of the truth
+    if (window.tcfStats && window.tcfStats.bank) window.tcfStats.bank();
     var p = store.get('plan', {});
     if (p.day !== PLAN.day) p = { day: PLAN.day, done: {} };
+    p.done = p.done || {};
     var s = window.tcfStats;
     var sec = s && s.dayStat ? s.dayStat().sec : 0;
     var stk = s && s.streak ? s.streak() : 0;
@@ -802,23 +917,51 @@
     if (dot) dot.classList.toggle('hidden', nDone >= PLAN.items.length);
   }
 
-  // the dot has to appear without building the whole plan first
+  /* The dot has to appear without building the whole plan first, and it has to be able
+     to go out again: it used to check five hard-coded slot names while the plan often
+     has four, so 「全都做完了」 still nagged forever. Ask the stored spec instead. */
   function planPeek() {
     var p = store.get('plan', {});
-    var keys = ['review', 'new', 'res', 'vocab', 'talk'];
-    var undone = p.day !== PLAN.day || keys.some(function (k) { return !(p.done || {})[k]; });
     var dot = $('planDot');
-    if (dot) dot.classList.toggle('hidden', !undone);
+    if (!dot) return;
+    if (p.day !== PLAN.day || !p.spec) { dot.classList.remove('hidden'); return; }
+    var done = p.done || {};
+    var undone = p.spec.some(function (sp) { return !done[sp.k]; });
+    dot.classList.toggle('hidden', !undone);
   }
   function planOpen() {
     PLAN.day = dayKey();
     $('dpwrap').classList.remove('hidden');
     $('dpBody').innerHTML = '<div class="vbe">正在排今天的计划…</div>';
+    // tapping 📅 before the book finished downloading used to throw on a null DOC and
+    // leave the panel on 「正在排…」 for good
+    if (!DOC) {
+      $('dpBody').innerHTML = '<div class="vbe">课文还没载入完，稍等一下再点一次。</div>';
+      return;
+    }
     fetch('/api/vocab/list').then(function (r) { return r.json(); })
       .catch(function () { return []; })
       .then(function (v) {
-        PLAN.items = planBuild(v || []);
+        v = v || [];
+        var p = store.get('plan', {});
+        if (p.day !== PLAN.day || !p.spec || !p.spec.length) {
+          p = { day: PLAN.day, done: {}, spec: planSpec(v) };
+          store.set('plan', p);
+        }
+        PLAN.items = planHydrate(p.spec, v);
+        /* If an entry can no longer be built — she deleted the words it named, or a
+           resource moved — the slot disappears from the list but its key would stay in
+           the spec, and planPeek would nag about a task she can never tick. Prune. */
+        if (PLAN.items.length !== p.spec.length) {
+          var live = {};
+          PLAN.items.forEach(function (it) { live[it.k] = 1; });
+          p.spec = p.spec.filter(function (sp) { return live[sp.k]; });
+          store.set('plan', p);
+        }
         planRender();
+      })
+      .catch(function () {
+        $('dpBody').innerHTML = '<div class="vbe">计划没能排出来，关掉重新点一次试试。</div>';
       });
   }
   $('btnPlan').onclick = planOpen;
@@ -830,10 +973,176 @@
     if (t) {
       var p = store.get('plan', {});
       if (p.day !== PLAN.day) p = { day: PLAN.day, done: {} };
+      p.done = p.done || {};
       p.done[t.dataset.tick] = p.done[t.dataset.tick] ? 0 : 1;
       store.set('plan', p);
       planRender();
       return;
+    }
+  });
+
+
+  /* ---------------- 句子笔记本 ----------------
+     生词本收的是词，这里收的是整句：划选任意一段法语，下面冒出「📓 存进笔记本」。
+     存下来的句子带着出处和录音，随时能重听、能跳回原文。全部只存在这台设备上。 */
+  var NOTES = store.get('notes', []);
+  if (!Array.isArray(NOTES)) NOTES = [];
+  function notesSave() { store.set('notes', NOTES.slice(-500)); }
+  function notesDot() {
+    var d = $('notesDot');
+    if (d) d.classList.toggle('hidden', !NOTES.length);
+  }
+
+  // what she selected, plus where it came from
+  function selInfo() {
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+    var txt = sel.toString().replace(/\s+/g, ' ').trim();
+    if (txt.length < 4 || txt.length > 400) return null;
+    var node = sel.anchorNode;
+    var el = node && (node.nodeType === 1 ? node : node.parentElement);
+    if (!el || !el.closest || !el.closest('#wrap')) return null;
+    var host = el.closest('[data-play],[data-aid]');
+    var aid = host ? (host.getAttribute('data-play') || host.getAttribute('data-aid')) : '';
+    /* Where the Chinese lives depends on how the block was rendered: beside the French
+       in a card, in the neighbouring cell of a table, or as the next sibling. Search
+       the same three places the indexer does rather than guess one. */
+    var zh = '';
+    var td = el.closest('td');
+    if (td) {
+      var sibTd = td.nextElementSibling || td.previousElementSibling;
+      if (sibTd) zh = sibTd.textContent.trim();
+    }
+    if (!zh) {
+      var card = el.closest('.b-card,.dl,.pcard,.dtx,.b-model');
+      var z = card && card.querySelector('.cz,.dzh,.exzh,.zh,.mzh,.dz');
+      if (!z) {
+        var sib = (card || el).nextElementSibling;
+        if (sib && /(^|\s)(cz|dzh|exzh|zh|mzh|dz)(\s|$)/.test(sib.className || '')) z = sib;
+      }
+      if (z) zh = z.textContent.trim();
+    }
+    zh = zh.replace(/\s+/g, ' ').slice(0, 160);
+    // the neighbouring cell is only a translation if it is actually Chinese;
+    // otherwise it is the next French example and labelling it 译文 would be a lie
+    if (zh === txt || !/[一-鿿]/.test(zh)) zh = '';
+    var r;
+    try { r = sel.getRangeAt(0).getBoundingClientRect(); } catch (e) { return null; }
+    if (!r || (!r.width && !r.height)) return null;
+    return { t: txt, aid: aid || '', zh: zh, rect: r };
+  }
+
+  var SEL = null;
+  function chipHide() { SEL = null; $('selchip').classList.add('hidden'); }
+  function chipShow() {
+    var info = selInfo();
+    if (!info) { chipHide(); return; }
+    SEL = info;
+    var chip = $('selchip');
+    chip.classList.remove('hidden');
+    $('scSay').classList.toggle('hidden', !info.aid);
+    var w = chip.offsetWidth, h = chip.offsetHeight;
+    var left = Math.min(Math.max(8, info.rect.left + info.rect.width / 2 - w / 2), window.innerWidth - w - 8);
+    var top = info.rect.bottom + 10;
+    if (top + h > window.innerHeight - 70) top = info.rect.top - h - 10;
+    // a selection can sit anywhere, but the pill has to stay somewhere she can reach it
+    top = Math.min(Math.max(8, top), window.innerHeight - h - 12);
+    chip.style.left = left + 'px';
+    chip.style.top = top + 'px';
+  }
+  var chipTimer = null;
+  document.addEventListener('selectionchange', function () {
+    clearTimeout(chipTimer);
+    // wait for the drag to settle, or the pill jitters along with her finger
+    chipTimer = setTimeout(chipShow, 220);
+  });
+  $('main').addEventListener('scroll', chipHide, { passive: true });
+  $('scSay').onclick = function (e) {
+    e.stopPropagation();
+    if (SEL && SEL.aid) play(SEL.aid, SEL.t.slice(0, 60));
+  };
+  $('scAdd').onclick = function (e) {
+    e.stopPropagation();
+    if (!SEL) return;
+    var c = DOC && DOC.chapters[CUR];
+    if (NOTES.some(function (x) { return x.t === SEL.t; })) { toast('这句已经在笔记本里了'); chipHide(); return; }
+    NOTES.push({ t: SEL.t, zh: SEL.zh, aid: SEL.aid, ts: Date.now(),
+                 key: c ? (c.key || ('ch' + c.no)) : '', no: c ? c.no : 0, ch: c ? c.zh : '' });
+    notesSave(); notesDot();
+    toast('已存进笔记本，共 ' + NOTES.length + ' 句');
+    try { window.getSelection().removeAllRanges(); } catch (err) {}
+    chipHide();
+  };
+
+  function spotSentence(aid, text) {
+    var el = aid ? document.querySelector('#wrap [data-play="' + aid + '"], #wrap [data-aid="' + aid + '"]') : null;
+    if (!el && text) {
+      var probe = text.slice(0, 24);
+      var all = document.querySelectorAll('#wrap .frtext, #wrap .mline, #wrap .cf, #wrap .b-para, #wrap .dtx');
+      for (var i = 0; i < all.length; i++) {
+        if (all[i].textContent.indexOf(probe) >= 0) { el = all[i]; break; }
+      }
+    }
+    if (!el) { toast('这一句在本章里找不到了'); return; }
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('spotx');
+    setTimeout(function () { el.classList.remove('spotx'); }, 6000);
+  }
+
+  function nbRender() {
+    $('nbN').textContent = NOTES.length ? NOTES.length + ' 句' : '';
+    if (!NOTES.length) {
+      $('nbList').innerHTML = '<div class="vbe">还是空的。<br><br>' +
+        '看书时用手指<b>划选</b>一句想记住的法语，下面会冒出「📓 存进笔记本」。' +
+        '存下来的句子带着出处和录音，随时能重听、能跳回原文。</div>';
+      return;
+    }
+    var h = NOTES.slice().reverse().map(function (x, ri) {
+      var i = NOTES.length - 1 - ri;
+      return '<div class="nbi">' +
+        '<div class="nbc">' +
+          '<div class="nbfr">' + esc(x.t) + '</div>' +
+          (x.zh ? '<div class="nbzh">' + esc(x.zh) + '</div>' : '') +
+          '<div class="nbsrc"><span>📍 ' + (x.no ? '第 ' + x.no + ' 章 · ' : '') + esc(x.ch || '') + '</span>' +
+          '<span>' + window.tcfStats.stamp(x.ts) + '</span>' +
+          '<button data-nbgo="' + i + '">跳回原文 ↗</button></div>' +
+        '</div>' +
+        '<div class="nbact">' +
+          (x.aid ? '<button data-nbsay="' + i + '" title="重听">🔊</button>' : '') +
+          '<button data-nbdel="' + i + '" title="删掉">✕</button>' +
+        '</div></div>';
+    }).join('');
+    $('nbList').innerHTML = h;
+  }
+  function nbOpen() { nbRender(); $('nbwrap').classList.remove('hidden'); }
+  $('btnNotes').onclick = nbOpen;
+  $('nbClose').onclick = function () { $('nbwrap').classList.add('hidden'); };
+  $('nbCopy').onclick = function () {
+    if (!NOTES.length) { toast('笔记本还是空的'); return; }
+    var txt = NOTES.map(function (x) {
+      return x.t + (x.zh ? '\n  ' + x.zh : '') + '\n  —— 第 ' + x.no + ' 章 ' + (x.ch || '');
+    }).join('\n\n');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function () { toast('已复制 ' + NOTES.length + ' 句'); })
+        .catch(function () { toast('复制失败，长按选中也可以'); });
+    } else { toast('这个浏览器不支持一键复制'); }
+  };
+  $('nbList').addEventListener('click', function (e) {
+    var g = e.target.closest('[data-nbgo]'), s = e.target.closest('[data-nbsay]'), d = e.target.closest('[data-nbdel]');
+    if (s) { var n1 = NOTES[+s.dataset.nbsay]; if (n1) play(n1.aid, n1.t.slice(0, 60)); return; }
+    if (d) {
+      var i = +d.dataset.nbdel;
+      NOTES.splice(i, 1); notesSave(); notesDot(); nbRender();
+      return;
+    }
+    if (g) {
+      var n2 = NOTES[+g.dataset.nbgo]; if (!n2) return;
+      $('nbwrap').classList.add('hidden');
+      var ci = chIndexByKey(n2.key);
+      if (ci < 0) { toast('这一章找不到了'); return; }
+      renderChapter(ci);
+      drawer(false);
+      setTimeout(function () { spotSentence(n2.aid, n2.t); }, 90);
     }
   });
 
@@ -903,9 +1212,23 @@
   $('btnVocab').onclick = vbOpen;
   /* on a phone the search box lives inside the drawer, so it took two steps to find */
   $('btnSearch').onclick = function () { drawer(true); setTimeout(function () { $('q').focus(); }, 60); };
-  $('btnMore').onclick = function (e) { e.stopPropagation(); $('moreMenu').classList.toggle('hidden'); };
+  /* The ⋯ menu was laid out at the right coordinates and painted nowhere: .topbar
+     scrolls sideways (overflow:auto), which clips its descendants, and position:fixed
+     does not escape that either because .topbar's own backdrop-filter makes it the
+     containing block for fixed children. Hit-testing each item returned .chead — all
+     four of 生词本 / 笔记本 / 学习记录 / 夜间模式 were unreachable on every phone.
+     Move it out of the toolbar entirely and place it by hand. */
+  document.body.appendChild($('moreMenu'));
+  $('btnMore').onclick = function (e) {
+    e.stopPropagation();
+    var m = $('moreMenu');
+    var r = this.getBoundingClientRect();
+    m.style.top = Math.round(r.bottom + 8) + 'px';
+    m.style.right = Math.round(window.innerWidth - r.right) + 'px';
+    m.classList.toggle('hidden');
+  };
   document.addEventListener('click', function (e) {
-    if (!e.target.closest('.morewrap')) $('moreMenu').classList.add('hidden');
+    if (!e.target.closest('.morewrap') && !e.target.closest('#moreMenu')) $('moreMenu').classList.add('hidden');
   });
 
   /* first run: she opens the app with no idea that anything is tappable */
@@ -950,12 +1273,35 @@
     else if (window.tcfLookup) window.tcfLookup.play(it.fr);   // saved words live in the word pack
   };
   $('pPlay').onclick = function () {
+    // a tapped word plays from lookup.js's own element; starting a whole-chapter
+    // read-aloud on top of it is never what she meant by pressing ▶
+    if (au.paused && window.tcfLookup && window.tcfLookup.busy && window.tcfLookup.busy()) {
+      window.tcfLookup.stop();
+      $('pNow').textContent = '已停下';
+      return;
+    }
     if (au.paused) { if (ARMED && au.src) { au.play(); this.textContent = '⏸'; } else startQueue(currentClips(), 0); }
     else { au.pause(); this.textContent = '▶'; }
   };
   $('pStop').onclick = function () { stopAll(); };
-  $('pNext').onclick = function () { if (QI >= 0 && QI < QUEUE.length - 1) { QI++; playQueueItem(); } };
-  $('pPrev').onclick = function () { if (QI > 0) { QI--; playQueueItem(); } };
+  /* Playing one sentence drops the queue, so ⏭ and ⏮ were inert after the single
+     most-used control in the app. Rebuild the chapter's list around whatever is
+     playing and step from there. */
+  function stepTo(d) {
+    if (QI < 0 || !QUEUE.length) {
+      var list = currentClips(), cur = (au.src || '').split('/').pop().replace(/\.[a-z0-9]+$/, '');
+      var at = -1;
+      for (var i = 0; i < list.length; i++) if (list[i].aid === cur) { at = i; break; }
+      if (at < 0) { if (!list.length) { toast('本章没有可朗读的法语'); return; } startQueue(list, 0); return; }
+      QUEUE = list; QI = at;
+    }
+    var n = QI + d;
+    if (n < 0) { toast('已经是第一句'); return; }
+    if (n > QUEUE.length - 1) { toast('已经是最后一句'); return; }
+    QI = n; playQueueItem();
+  }
+  $('pNext').onclick = function () { stepTo(1); };
+  $('pPrev').onclick = function () { stepTo(-1); };
   $('btnRepeat').onclick = function () { REPEAT = !REPEAT; this.classList.toggle('on', REPEAT); toast(REPEAT ? '复读开：每句念两遍' : '复读关'); };
   $('segSpeed').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
@@ -1026,8 +1372,9 @@
     /* the toolbar wanted 476px on a 360px screen, pushing 📊 and 🌙 off the edge;
        the secondary actions move into a ⋯ menu instead of being unreachable */
     var menu = $('moreMenu'), bar = document.querySelector('.topbar');
-    var secondary = [$('btnVocab'), $('btnStats'), $('btnDark')];
-    var LABEL = { btnStats: '📊 学习记录', btnDark: '🌙 夜间模式', btnVocab: '📒 生词本' };
+    var secondary = [$('btnVocab'), $('btnNotes'), $('btnStats'), $('btnDark')];
+    var LABEL = { btnStats: '📊 学习记录', btnDark: '🌙 夜间模式', btnVocab: '📒 生词本',
+                  btnNotes: '📓 笔记本' };
     if (narrow) {
       secondary.forEach(function (b) {
         if (!b || b.parentNode === menu) return;
@@ -1081,11 +1428,12 @@
       });
       if (nres) wr.textContent = nres + ' 条里 ' + nemb + ' 条能直接在站内播，每一条';
     }
+    notesDot();
     if (store.get('dark', false)) document.body.classList.add('dark');
     RATE = store.get('rate', 1);
     document.querySelectorAll('#segSpeed button').forEach(function (b) { b.classList.toggle('on', parseFloat(b.dataset.r) === RATE); });
     var last = Math.min(store.get('last', 0), d.chapters.length - 1);
-    renderChapter(last);
+    renderChapter(last, true);
     markVisited();
     if (last > 0) toast('接着上次：第 ' + d.chapters[last].no + ' 章');
     var sec0 = window.tcfStats && window.tcfStats.dayStat ? window.tcfStats.dayStat().sec : 1;

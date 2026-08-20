@@ -29,6 +29,7 @@
       <button class="btn pri" id="btnPlayAll">▶ 朗读<span class="lbl">本章法语</span></button>
       <button class="btn" id="btnCards">🎴 背诵<span class="lbl">模式</span></button>
       <button class="btn" id="btnVocab">📒 生词本</button>
+      <button class="btn" id="btnNotes">📓 笔记本<i class="dot hidden" id="notesDot"></i></button>
       <button class="btn only-phone" id="btnSearch" title="搜索">🔍</button>
       <button class="btn" id="btnStats" title="学习记录">📊</button>
       <div class="morewrap only-phone"><button class="btn" id="btnMore" title="更多">⋯</button>
@@ -71,6 +72,21 @@
   </div>
 </div>
 
+<div id="nbwrap" class="hidden">
+  <div class="vb">
+    <div class="vbh"><b>📓 笔记本</b><span id="nbN" class="vbn"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="nbCopy">复制全部</button>
+      <button class="btn" id="nbClose">✕ 关闭</button></div>
+    <div id="nbList" class="vbl"></div>
+  </div>
+</div>
+
+<div id="selchip" class="hidden">
+  <button class="scb" id="scSay">🔊</button>
+  <button class="scb pri" id="scAdd">📓 存进笔记本</button>
+</div>
+
 <div id="vbwrap" class="hidden">
   <div class="vb">
     <div class="vbh"><b>📒 生词本</b><span id="vbN" class="vbn"></span>
@@ -90,7 +106,7 @@
       <div class="wc-i"><b>🔊 朗读本段/本章</b><span>连着播，可以当听力放着听</span></div>
       <div class="wc-i"><b>🎴 背诵模式</b><span>看法语猜中文，答错的会再出现</span></div>
     </div>
-    <div class="wc-t">左上角 ☰ 打开目录，共 56 章。想找什么直接用 🔍 搜，中法文都能搜。<br>第 30 章是<b>视频与听力资源库</b>，<span id="wcRes">每一条</span>都验证过，标了难度和国内能不能打开。<br><b>📊 学习记录</b>会记下你看了哪章、查了哪些词、点开过哪些视频——只存在这台设备上，<b>不会自动发给任何人</b>。</div>
+    <div class="wc-t">左上角 ☰ 打开目录，共 56 章。想找什么直接用 🔍 搜，中法文都能搜。<br>第 30 章是<b>视频与听力资源库</b>，<span id="wcRes">每一条</span>都验证过，标了难度和国内能不能打开。<br><b>看到想记住的句子，用手指划选它</b>，下面会冒出「📓 存进笔记本」——存下来的句子随时能重听、能跳回原文。<br><b>📊 学习记录</b>会记下你看了哪章、查了哪些词、点开过哪些视频——只存在这台设备上，<b>不会自动发给任何人</b>。</div>
     <button class="btn pri" id="wcGo">开始</button>
   </div>
 </div>

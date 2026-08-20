@@ -16,20 +16,40 @@
     try { S = JSON.parse(localStorage.getItem(KEY)) || blank(); }
     catch (e) { S = blank(); }
     for (var k in blank()) if (S[k] === undefined) S[k] = blank()[k];
+    /* Chapter records written before the daily plan existed have no `key`, and the
+       plan looks chapters up by it — without this migration her entire history is
+       invisible to 复习 the first time she opens the new version. */
+    for (var ck in S.chapters) if (S.chapters[ck] && !S.chapters[ck].key) S.chapters[ck].key = ck;
     return S;
   }
   var saveTimer = null;
-  function save() {
+  function writeNow() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
-      try { localStorage.setItem(KEY, JSON.stringify(S)); }
-      catch (e) {                       // quota: drop the trail, keep the totals
-        S.recent = S.recent.slice(-60);
-        S.links = S.links.slice(-60);
-        try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e2) {}
-      }
-    }, 400);
+    saveTimer = null;
+    mine = true;
+    try { localStorage.setItem(KEY, JSON.stringify(S)); }
+    catch (e) {                       // quota: drop the trail, keep the totals
+      S.recent = S.recent.slice(-60);
+      S.links = S.links.slice(-60);
+      try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e2) {}
+    }
+    mine = false;
   }
+  /* now=true writes synchronously. The page is about to be frozen or closed, and a
+     400 ms timer is 400 ms the tab does not have. */
+  function save(now) {
+    if (now) { writeNow(); return; }
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(writeNow, 400);
+  }
+  /* A second tab holds the whole log in memory too, and writes it back wholesale.
+     Without this the tab that saves last erases whatever the other one recorded. */
+  var mine = false;
+  window.addEventListener('storage', function (e) {
+    if (e.key !== KEY || mine) return;
+    if (saveTimer) writeNow();        // bank ours first, then take theirs
+    else S = null;
+  });
 
   function today() {
     var d = new Date();
@@ -78,9 +98,25 @@
     save();
   }
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) flush(); else if (cur) since = Date.now();
+    if (document.hidden) { flush(); save(true); } else if (cur) since = Date.now();
   });
-  window.addEventListener('pagehide', closeOut);
+  /* pagehide is not necessarily the end: on iOS it fires every time she switches
+     apps and the page goes into the back/forward cache. closeOut() cleared the
+     current chapter and nothing put it back, so nothing she read after the first
+     app switch was ever counted. Bank the time, keep the chapter, and re-arm when
+     the page comes back. */
+  window.addEventListener('pagehide', function () { flush(); save(true); });
+  window.addEventListener('pageshow', function () { if (cur) since = Date.now(); });
+  /* One sitting longer than an hour used to be thrown away whole rather than
+     clamped. Bank it every minute instead — but only while she is actually here,
+     so a tab forgotten on a desk still does not invent study time. */
+  var lastAct = Date.now();
+  ['pointerdown', 'keydown', 'touchstart', 'wheel'].forEach(function (ev) {
+    document.addEventListener(ev, function () { lastAct = Date.now(); }, true);
+  });
+  setInterval(function () {
+    if (!document.hidden && cur && Date.now() - lastAct < 3e5) flush();
+  }, 60000);
 
   /* ---- individual actions ---- */
   function audio(label) { load(); S.audio++; day().audio++; save(); }
@@ -160,6 +196,7 @@
   }
   function dayStat() { var v = day(); return { sec: v.sec, audio: v.audio, words: v.words, links: v.links }; }
   window.tcfStats = { view: view, audio: audio, word: word, link: link, flash: flash,
+                      bank: flush,
                       search: search, summary: summary, asText: asText, mins: mins,
                       streak: streak, dayStat: dayStat, today: today,
                       stamp: stamp, reset: function () { S = blank(); save(); } };

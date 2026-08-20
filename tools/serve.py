@@ -26,10 +26,17 @@ def base_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 BASE = base_dir()
+REPO = os.path.dirname(BASE)         # unfrozen, serve.py lives in <repo>/tools
 DATA = os.path.join(BASE, "data")
 if not os.path.isdir(DATA):
     DATA = BASE                      # frozen build keeps the packs flat
+if not os.path.exists(os.path.join(DATA, "content.json")) and \
+        os.path.exists(os.path.join(REPO, "data", "content.json")):
+    DATA = os.path.join(REPO, "data")
 STATIC = os.path.join(BASE, "static")
+if not os.path.isdir(STATIC):
+    STATIC = os.path.join(BASE, "src")   # the desktop sources live in tools/src
+CLIPDIR = os.path.join(REPO, "clip")     # clips are unpacked in the repo, not zipped
 
 def user_dir():
     """Writable per-user folder. Never next to the exe: it may sit on a read-only stick."""
@@ -84,6 +91,16 @@ MIME = {".opus": "audio/ogg", ".mp3": "audio/mpeg", ".m4a": "audio/mp4"}
 
 def send_clip(names, member_base):
     """Look for <base>.<ext> across the given packs and stream the first hit."""
+    # running from the repo there are no zips, just clip/<id>.mp3
+    for ext in (".mp3", ".opus"):
+        p = os.path.join(CLIPDIR, member_base + ext)
+        if os.path.exists(p):
+            with open(p, "rb") as f:
+                blob = f.read()
+            r = Response(blob, mimetype=MIME[ext])
+            r.headers["Cache-Control"] = "public, max-age=604800"
+            r.headers["Content-Length"] = str(len(blob))
+            return r
     for name in names:
         z = pack(name)
         if not z:

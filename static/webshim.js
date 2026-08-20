@@ -15,7 +15,10 @@
   function vocab() {
     try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
   }
-  function save(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }
+  // storage full on an iPhone used to be swallowed here, and the card still said 已加入
+  function save(v) {
+    try { localStorage.setItem(KEY, JSON.stringify(v)); return true; } catch (e) { return false; }
+  }
   function json(o) {
     return Promise.resolve(new Response(JSON.stringify(o),
       { status: 200, headers: { 'Content-Type': 'application/json' } }));
@@ -32,18 +35,18 @@
     if (u === '/api/quit') return json({ ok: true });
     if (u === '/api/vocab/list') return json(vocab());
     if (u === '/api/vocab/add') {
-      var d = body(opt), v = vocab();
+      var d = body(opt), v = vocab(), ok = true;
       if (d.word && !v.some(function (x) { return (x.word || '').toLowerCase() === d.word.toLowerCase(); })) {
         v.push({ word: d.word, lemma: d.lemma || d.word, gloss: d.gloss || '', sentence: d.sentence || '' });
-        save(v);
+        ok = save(v);
       }
-      return json({ ok: true, n: v.length });
+      return json({ ok: ok, n: v.length });
     }
     if (u === '/api/vocab/remove') {
       var w = (body(opt).word || '').toLowerCase();
       var kept = vocab().filter(function (x) { return (x.word || '').toLowerCase() !== w; });
-      save(kept);
-      return json({ ok: true, n: kept.length });
+      var ok2 = save(kept);
+      return json({ ok: ok2, n: kept.length });
     }
     return real(url, opt);
   };
